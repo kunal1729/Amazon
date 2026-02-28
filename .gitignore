@@ -42,3 +42,8 @@ Thumbs.db
 # Temp files
 tmp/
 temp/
+*.csv
+
+# SSH keys
+ssh
+ssh.pub
