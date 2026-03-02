@@ -40,45 +40,59 @@ A Sellerboard-like profit analytics platform for Amazon/e-commerce sellers. Trac
 ## Getting Started
 
 ### Prerequisites
-- Python 3.9+
-- Node.js 18+
+- **Python 3.9 - 3.12** (recommended) or Python 3.13+ with Rust installed
+- **Node.js 18+**
 
-### Backend Setup
+### Quick Start
 
 ```bash
+# Clone the repository
+git clone https://github.com/kunal1729/Amazon.git
+cd Amazon
+
+# Terminal 1 - Backend
 cd backend
-
-# Create virtual environment
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
 pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
 
-# Run the server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-### Frontend Setup
-
-```bash
+# Terminal 2 - Frontend
 cd frontend
-
-# Install dependencies
 npm install
-
-# Run dev server
 npm run dev
 ```
 
-### Seed Sample Data
+Open http://localhost:5173 in your browser.
 
-After starting both servers, visit the frontend and click "Seed Sample Data" to populate the database with sample products, orders, and analytics data.
+### Python 3.13+ / 3.14 Users
 
-Or call the API directly:
+If you're using Python 3.13 or newer, you need to install **Rust** first (required to compile pydantic-core):
+
 ```bash
-curl -X POST http://localhost:8000/api/seed
+# Install Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source $HOME/.cargo/env
+
+# Then proceed with normal setup
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 ```
+
+### Importing Your Data
+
+1. Go to **Settings** tab in the app
+2. Upload your **Amazon Orders Report** (.tsv or .csv)
+3. Upload your **Amazon Transactions Report** (.csv)
+4. Go to **COGS** tab to set your actual product costs
+
+### COGS Management
+
+1. Export current products: Click "Export CSV" in COGS tab
+2. Edit the CSV in Excel/Sheets with your actual costs
+3. Import back: Click "Import CSV" to update all COGS
 
 ## API Endpoints
 
