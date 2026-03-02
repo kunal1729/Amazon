@@ -44,8 +44,10 @@ export default function AnalyticsPage() {
   const fin = txnSummary?.financials;
   const bankTransfers = fin?.bank_transfers || 0;  // Actual money sent to bank
   const grossRevenue = fin ? fin.gross_sales + fin.gross_shipping : 0;
-  const estimatedCOGS = fin ? fin.gross_sales * 0.4 : 0;
-  const trueProfit = bankTransfers - estimatedCOGS;
+  const actualCOGS = fin?.actual_cogs || 0;
+  const cogsIsEstimated = fin?.cogs_is_estimated || false;
+  const trueProfit = fin?.true_profit || (bankTransfers - actualCOGS);
+  const profitMargin = grossRevenue > 0 ? (trueProfit / grossRevenue) * 100 : 0;
 
   // Pie chart data for fee breakdown
   const feeData = fin ? [
@@ -100,16 +102,25 @@ export default function AnalyticsPage() {
         </div>
         <div className="mt-4 pt-4 border-t border-white/20 grid grid-cols-2 md:grid-cols-3 gap-4">
           <div className="bg-white/10 rounded-lg p-4">
-            <p className="text-emerald-100 text-xs">Est. COGS (40%)</p>
-            <p className="text-xl font-bold text-red-200">-₹{estimatedCOGS.toLocaleString('en-IN')}</p>
+            <p className="text-emerald-100 text-xs">
+              {cogsIsEstimated ? 'COGS (Est. 40%)' : 'COGS (Actual)'}
+            </p>
+            <p className="text-xl font-bold text-red-200">-₹{actualCOGS.toLocaleString('en-IN')}</p>
+            {cogsIsEstimated && (
+              <p className="text-emerald-200 text-xs mt-1">Set actual COGS in COGS tab</p>
+            )}
           </div>
           <div className="bg-white/10 rounded-lg p-4">
             <p className="text-emerald-100 text-xs">True Profit</p>
-            <p className="text-xl font-bold text-green-200">₹{trueProfit.toLocaleString('en-IN')}</p>
+            <p className={`text-xl font-bold ${trueProfit >= 0 ? 'text-green-200' : 'text-red-200'}`}>
+              {trueProfit >= 0 ? '₹' : '-₹'}{Math.abs(trueProfit).toLocaleString('en-IN')}
+            </p>
           </div>
           <div className="bg-white/10 rounded-lg p-4">
             <p className="text-emerald-100 text-xs">Profit Margin</p>
-            <p className="text-xl font-bold">{((trueProfit / grossRevenue) * 100).toFixed(1)}%</p>
+            <p className={`text-xl font-bold ${profitMargin >= 0 ? '' : 'text-red-200'}`}>
+              {profitMargin.toFixed(1)}%
+            </p>
           </div>
         </div>
       </div>

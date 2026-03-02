@@ -306,9 +306,21 @@ def get_transactions_summary(
     total_fees = selling_fees + fba_fees + other_fees + service_fees
     net_revenue = gross_sales + gross_shipping - total_refunds
     
-    # Estimate COGS as 40% of gross sales
-    estimated_cogs = gross_sales * 0.4
-    true_profit = settlement_total - estimated_cogs
+    # Calculate actual COGS from order items (using COGS set via COGS management)
+    order_items = db.query(OrderItem).join(Order).filter(
+        Order.company_id == company_id
+    ).all()
+    
+    actual_cogs = sum(item.unit_cost * item.quantity for item in order_items)
+    
+    # If no COGS data available, estimate as 40% (fallback)
+    if actual_cogs == 0 and gross_sales > 0:
+        actual_cogs = gross_sales * 0.4
+        cogs_is_estimated = True
+    else:
+        cogs_is_estimated = False
+    
+    true_profit = bank_transfers - actual_cogs
     true_profit_margin = (true_profit / net_revenue * 100) if net_revenue > 0 else 0
     
     return {
@@ -328,6 +340,8 @@ def get_transactions_summary(
             "total_fees": round(total_fees, 2),
             "settlement_amount": round(settlement_total, 2),
             "bank_transfers": round(bank_transfers, 2),
+            "actual_cogs": round(actual_cogs, 2),
+            "cogs_is_estimated": cogs_is_estimated,
             "true_profit": round(true_profit, 2),
             "true_profit_margin": round(true_profit_margin, 2)
         },

@@ -19,6 +19,9 @@ interface TransactionFinancials {
   total_fees: number;
   bank_transfers: number;
   total_reimbursements: number;
+  actual_cogs?: number;
+  cogs_is_estimated?: boolean;
+  true_profit?: number;
 }
 
 interface ProfitBreakdownChartProps {
@@ -98,6 +101,22 @@ export default function ProfitBreakdownChart({ data }: ProfitBreakdownChartProps
           <span className="text-gray-700 font-medium">Bank Transfer</span>
           <span className="font-bold text-green-700">{formatLakhs(data.bank_transfers)}</span>
         </div>
+        {data.actual_cogs !== undefined && data.actual_cogs > 0 && (
+          <>
+            <div className="flex justify-between">
+              <span className="text-gray-500">
+                - COGS {data.cogs_is_estimated ? '(Est.)' : ''}
+              </span>
+              <span className="font-semibold text-red-600">-{formatLakhs(data.actual_cogs)}</span>
+            </div>
+            <div className="border-t pt-2 flex justify-between">
+              <span className="text-gray-700 font-medium">True Profit</span>
+              <span className={`font-bold ${(data.true_profit || 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                {formatLakhs(data.true_profit || 0)}
+              </span>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

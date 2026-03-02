@@ -39,6 +39,10 @@ interface TransactionFinancials {
   settlement_amount: number;
   bank_transfers: number;
   total_reimbursements: number;
+  actual_cogs: number;
+  cogs_is_estimated: boolean;
+  true_profit: number;
+  true_profit_margin: number;
 }
 
 export default function Dashboard() {
