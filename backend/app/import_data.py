@@ -73,7 +73,13 @@ def detect_delimiter(filepath: str) -> str:
 
 
 def import_orders_from_csv(db: Session, filepath: str, company_id: int):
-    """Import orders from Amazon All Orders Report CSV/TSV"""
+    """Import orders from Amazon All Orders Report CSV/TSV
+    
+    COGS Logic:
+    - For existing products: Use the COGS already set in database (via COGS management)
+    - For new products: Default to 40% of item price (user can update later via COGS page)
+    - Never overwrite manually set COGS values
+    """
     orders_created = 0
     products_created = 0
     
@@ -100,6 +106,8 @@ def import_orders_from_csv(db: Session, filepath: str, company_id: int):
             item_price_for_product = parse_float(row.get('item-price', 0))
             
             if not product:
+                # New product - use 40% as default COGS (can be updated via COGS management)
+                default_cogs = item_price_for_product * 0.4 if item_price_for_product > 0 else 0
                 product = Product(
                     company_id=company_id,
                     sku=sku,
@@ -107,15 +115,25 @@ def import_orders_from_csv(db: Session, filepath: str, company_id: int):
                     title=row.get('product-name', '') or row.get('product_name', '') or 'Unknown Product',
                     category=row.get('item-promotion-discount', ''),
                     current_price=item_price_for_product,
-                    unit_cost=item_price_for_product * 0.4,  # Estimate 40% COGS
+                    unit_cost=default_cogs,
                 )
                 db.add(product)
                 db.flush()
                 products_created += 1
-            elif product.unit_cost == 0 and item_price_for_product > 0:
-                # Update product cost if it was created with 0 (from cancelled order)
-                product.current_price = item_price_for_product
-                product.unit_cost = item_price_for_product * 0.4
+                print(f"New product {sku}: COGS set to {default_cogs:.2f} (40% default)")
+            else:
+                # Existing product - preserve COGS if already set, only update if 0
+                if product.unit_cost == 0 and item_price_for_product > 0:
+                    default_cogs = item_price_for_product * 0.4
+                    product.unit_cost = default_cogs
+                    print(f"Product {sku}: COGS was 0, setting to {default_cogs:.2f} (40% default)")
+                else:
+                    # Use existing COGS from database (set via COGS management)
+                    print(f"Product {sku}: Using existing COGS {product.unit_cost:.2f}")
+                
+                # Update price if we have a valid one
+                if item_price_for_product > 0:
+                    product.current_price = item_price_for_product
             
             # Create order
             amazon_order_id = row.get('amazon-order-id', '') or row.get('order-id', '')
@@ -148,10 +166,10 @@ def import_orders_from_csv(db: Session, filepath: str, company_id: int):
             db.add(order)
             db.flush()
             
-            # Create order item
+            # Create order item - use product's COGS from database
             quantity = parse_int(row.get('quantity', 1)) or 1
-            # Use product's unit_cost, or estimate from item_price if not set
-            item_unit_cost = product.unit_cost if product.unit_cost > 0 else (item_price * 0.4 / quantity if quantity > 0 else 0)
+            # Always use product's stored unit_cost (from COGS management or default)
+            item_unit_cost = product.unit_cost
             order_item = OrderItem(
                 order_id=order.id,
                 product_id=product.id,
@@ -168,19 +186,43 @@ def import_orders_from_csv(db: Session, filepath: str, company_id: int):
 
 
 def import_transactions_from_csv(db: Session, filepath: str, company_id: int):
-    """Import transactions from Amazon Transactions Report CSV"""
+    """Import transactions from Amazon Transactions Report CSV
+    
+    Duplicate checking: Transactions are identified by combination of
+    order_id + date + total amount to prevent duplicates when re-uploading.
+    """
     transactions_created = 0
+    duplicates_skipped = 0
     
     with open(filepath, 'r', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f)
         
         for row in reader:
+            order_id = row.get('order id', '')
+            txn_date = parse_date(row.get('date/time', ''))
+            txn_total = parse_float(row.get('total', 0))
+            txn_type = row.get('type', '')
+            sku = row.get('Sku', '') or row.get('sku', '')
+            
+            # Check for duplicate transaction
+            existing_txn = db.query(Transaction).filter(
+                Transaction.company_id == company_id,
+                Transaction.order_id == order_id,
+                Transaction.type == txn_type,
+                Transaction.sku == sku,
+                Transaction.total == txn_total
+            ).first()
+            
+            if existing_txn:
+                duplicates_skipped += 1
+                continue
+            
             txn = Transaction(
                 company_id=company_id,
                 settlement_id=row.get('settlement id', ''),
-                type=row.get('type', ''),
-                order_id=row.get('order id', ''),
-                sku=row.get('Sku', '') or row.get('sku', ''),
+                type=txn_type,
+                order_id=order_id,
+                sku=sku,
                 description=row.get('description', ''),
                 quantity=parse_int(row.get('quantity', 0)),
                 marketplace=row.get('marketplace', ''),
@@ -202,11 +244,15 @@ def import_transactions_from_csv(db: Session, filepath: str, company_id: int):
                 fba_fees=parse_float(row.get('fba fees', 0)),
                 other_transaction_fees=parse_float(row.get('other transaction fees', 0)),
                 other_fees=parse_float(row.get('other', 0)),
-                total=parse_float(row.get('total', 0)),
-                date=parse_date(row.get('date/time', '')),
+                total=txn_total,
+                date=txn_date,
             )
             db.add(txn)
             transactions_created += 1
     
     db.commit()
-    return {'transactions_created': transactions_created}
+    print(f"Transactions: {transactions_created} created, {duplicates_skipped} duplicates skipped")
+    return {
+        'transactions_created': transactions_created,
+        'duplicates_skipped': duplicates_skipped
+    }
