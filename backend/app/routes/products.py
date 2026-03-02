@@ -261,7 +261,9 @@ async def import_cogs_csv(
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    """Import COGS from CSV file. Expected columns: sku, unit_cost (or product_id, unit_cost)"""
+    """Import COGS from CSV file. Also updates product titles if provided.
+    Expected columns: sku, unit_cost (or product_id, unit_cost), optionally title
+    """
     if not file.filename.endswith(('.csv', '.txt')):
         raise HTTPException(status_code=400, detail="File must be CSV format")
     
@@ -269,6 +271,7 @@ async def import_cogs_csv(
     text_content = content.decode('utf-8')
     
     updated = 0
+    titles_updated = 0
     not_found = []
     errors = []
     
@@ -279,15 +282,17 @@ async def import_cogs_csv(
             sku = row.get('sku') or row.get('SKU') or row.get('Sku')
             product_id = row.get('product_id') or row.get('id')
             cost_str = row.get('unit_cost') or row.get('cost') or row.get('cogs') or row.get('COGS') or row.get('Cost')
+            title = row.get('title') or row.get('Title') or row.get('product_name') or row.get('Product Name')
             
-            if not cost_str:
+            if not cost_str and not title:
                 continue
             
-            try:
-                unit_cost = float(cost_str.replace(',', '').strip())
-            except ValueError:
-                errors.append(f"Invalid cost value: {cost_str}")
-                continue
+            unit_cost = None
+            if cost_str:
+                try:
+                    unit_cost = float(cost_str.replace(',', '').strip())
+                except ValueError:
+                    errors.append(f"Invalid cost value: {cost_str}")
             
             product = None
             if product_id:
@@ -300,8 +305,12 @@ async def import_cogs_csv(
                 product = db.query(Product).filter(Product.sku == sku).first()
             
             if product:
-                product.unit_cost = unit_cost
-                updated += 1
+                if unit_cost is not None:
+                    product.unit_cost = unit_cost
+                    updated += 1
+                if title and title.strip() and (not product.title or product.title == 'Unknown Product'):
+                    product.title = title.strip()
+                    titles_updated += 1
             else:
                 not_found.append(sku or product_id)
         
@@ -310,13 +319,18 @@ async def import_cogs_csv(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error parsing CSV: {str(e)}")
     
+    message = f"Updated COGS for {updated} products"
+    if titles_updated > 0:
+        message += f", titles for {titles_updated} products"
+    
     return {
         "success": True,
         "updated": updated,
-        "not_found": not_found[:20],  # Limit to first 20
+        "titles_updated": titles_updated,
+        "not_found": not_found[:20],
         "not_found_count": len(not_found),
         "errors": errors[:10],
-        "message": f"Updated COGS for {updated} products"
+        "message": message
     }
 
 

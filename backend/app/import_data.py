@@ -105,6 +105,20 @@ def import_orders_from_csv(db: Session, filepath: str, company_id: int):
             
             item_price_for_product = parse_float(row.get('item-price', 0))
             
+            # Extract product title from various possible column names
+            product_title = (
+                row.get('product-name', '') or 
+                row.get('product_name', '') or 
+                row.get('item-name', '') or
+                row.get('item_name', '') or
+                row.get('title', '') or
+                row.get('product-title', '') or
+                row.get('product_title', '') or
+                row.get('Title', '') or
+                row.get('Product Name', '') or
+                ''
+            ).strip()
+            
             if not product:
                 # New product - use 40% as default COGS (can be updated via COGS management)
                 default_cogs = item_price_for_product * 0.4 if item_price_for_product > 0 else 0
@@ -112,7 +126,7 @@ def import_orders_from_csv(db: Session, filepath: str, company_id: int):
                     company_id=company_id,
                     sku=sku,
                     asin=asin,
-                    title=row.get('product-name', '') or row.get('product_name', '') or 'Unknown Product',
+                    title=product_title or 'Unknown Product',
                     category=row.get('item-promotion-discount', ''),
                     current_price=item_price_for_product,
                     unit_cost=default_cogs,
