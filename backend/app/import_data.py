@@ -199,70 +199,114 @@ def import_orders_from_csv(db: Session, filepath: str, company_id: int):
     return {'orders_created': orders_created, 'products_created': products_created}
 
 
+def get_csv_value(row, *keys):
+    """Get value from CSV row trying multiple possible column names (case-insensitive)"""
+    # Filter out None keys and create lowercase mapping
+    row_lower = {k.lower().strip(): v for k, v in row.items() if k is not None}
+    for key in keys:
+        # Try exact match first
+        if key in row:
+            return row[key] or ''
+        # Try lowercase match
+        if key.lower() in row_lower:
+            return row_lower[key.lower()] or ''
+    return ''
+
+
 def import_transactions_from_csv(db: Session, filepath: str, company_id: int):
     """Import transactions from Amazon Transactions Report CSV
     
-    Duplicate checking: Transactions are identified by combination of
-    order_id + date + total amount to prevent duplicates when re-uploading.
+    Handles files that have definition/header lines before the actual column headers.
+    Looks for the row containing 'date/time' and 'type' as the header row.
     """
     transactions_created = 0
     duplicates_skipped = 0
     
     with open(filepath, 'r', encoding='utf-8-sig') as f:
-        reader = csv.DictReader(f)
+        lines = f.readlines()
+    
+    # Find the actual header row (contains 'date/time' and 'type')
+    header_row_idx = 0
+    for i, line in enumerate(lines):
+        line_lower = line.lower()
+        if 'date/time' in line_lower and 'type' in line_lower and 'total' in line_lower:
+            header_row_idx = i
+            print(f"Found header row at line {i + 1}")
+            break
+    
+    # Parse CSV starting from the header row
+    csv_content = ''.join(lines[header_row_idx:])
+    reader = csv.DictReader(csv_content.splitlines())
+    
+    print(f"CSV Headers: {reader.fieldnames}")
+    
+    for row in reader:
+        # Get values with multiple possible column names
+        order_id = get_csv_value(row, 'order id', 'Order ID', 'order_id', 'OrderId', 'Amazon Order Id')
+        txn_date = parse_date(get_csv_value(row, 'date/time', 'Date/Time', 'date', 'Date', 'Posted Date', 'posted date', 'Transaction Date'))
+        txn_total = parse_float(get_csv_value(row, 'total', 'Total', 'Amount', 'amount', 'Net Amount', 'net amount'))
+        txn_type = get_csv_value(row, 'type', 'Type', 'Transaction Type', 'transaction type', 'Description')
+        sku = get_csv_value(row, 'sku', 'Sku', 'SKU', 'MSKU', 'Merchant SKU')
         
-        for row in reader:
-            order_id = row.get('order id', '')
-            txn_date = parse_date(row.get('date/time', ''))
-            txn_total = parse_float(row.get('total', 0))
-            txn_type = row.get('type', '')
-            sku = row.get('Sku', '') or row.get('sku', '')
-            
-            # Check for duplicate transaction
-            existing_txn = db.query(Transaction).filter(
-                Transaction.company_id == company_id,
-                Transaction.order_id == order_id,
-                Transaction.type == txn_type,
-                Transaction.sku == sku,
-                Transaction.total == txn_total
-            ).first()
-            
-            if existing_txn:
-                duplicates_skipped += 1
-                continue
-            
-            txn = Transaction(
-                company_id=company_id,
-                settlement_id=row.get('settlement id', ''),
-                type=txn_type,
-                order_id=order_id,
-                sku=sku,
-                description=row.get('description', ''),
-                quantity=parse_int(row.get('quantity', 0)),
-                marketplace=row.get('marketplace', ''),
-                account_type=row.get('account type', ''),
-                fulfillment=row.get('fulfillment', ''),
-                order_city=row.get('order city', ''),
-                order_state=row.get('order state', ''),
-                order_postal=row.get('order postal', ''),
-                product_sales=parse_float(row.get('product sales', 0)),
-                shipping_credits=parse_float(row.get('shipping credits', 0)),
-                gift_wrap_credits=parse_float(row.get('gift wrap credits', 0)),
-                promotional_rebates=parse_float(row.get('promotional rebates', 0)),
-                sales_tax_liable=parse_float(row.get('Total sales tax liable(GST before adjusting TCS)', 0)),
-                tcs_cgst=parse_float(row.get('TCS-CGST', 0)),
-                tcs_sgst=parse_float(row.get('TCS-SGST', 0)),
-                tcs_igst=parse_float(row.get('TCS-IGST', 0)),
-                tds_194o=parse_float(row.get('TDS (Section 194-O)', 0)),
-                selling_fees=parse_float(row.get('selling fees', 0)),
-                fba_fees=parse_float(row.get('fba fees', 0)),
-                other_transaction_fees=parse_float(row.get('other transaction fees', 0)),
-                other_fees=parse_float(row.get('other', 0)),
-                total=txn_total,
-                date=txn_date,
-            )
-            db.add(txn)
-            transactions_created += 1
+        # If no type found, try to infer from description or other fields
+        if not txn_type:
+            desc = get_csv_value(row, 'description', 'Description', 'Item Description')
+            if 'refund' in desc.lower():
+                txn_type = 'Refund'
+            elif 'order' in desc.lower() or 'product' in desc.lower():
+                txn_type = 'Order'
+            elif 'transfer' in desc.lower():
+                txn_type = 'Transfer'
+            elif 'fee' in desc.lower():
+                txn_type = 'Service Fee'
+            else:
+                txn_type = 'Unknown'
+        
+        # Check for duplicate transaction
+        existing_txn = db.query(Transaction).filter(
+            Transaction.company_id == company_id,
+            Transaction.order_id == order_id,
+            Transaction.type == txn_type,
+            Transaction.sku == sku,
+            Transaction.total == txn_total
+        ).first()
+        
+        if existing_txn:
+            duplicates_skipped += 1
+            continue
+        
+        txn = Transaction(
+            company_id=company_id,
+            settlement_id=get_csv_value(row, 'settlement id', 'Settlement ID', 'settlement_id'),
+            type=txn_type,
+            order_id=order_id,
+            sku=sku,
+            description=get_csv_value(row, 'description', 'Description', 'Item Description'),
+            quantity=parse_int(get_csv_value(row, 'quantity', 'Quantity', 'qty')),
+            marketplace=get_csv_value(row, 'marketplace', 'Marketplace'),
+            account_type=get_csv_value(row, 'account type', 'Account Type'),
+            fulfillment=get_csv_value(row, 'fulfillment', 'Fulfillment', 'Fulfillment Channel'),
+            order_city=get_csv_value(row, 'order city', 'Order City', 'City'),
+            order_state=get_csv_value(row, 'order state', 'Order State', 'State'),
+            order_postal=get_csv_value(row, 'order postal', 'Order Postal', 'Postal Code'),
+            product_sales=parse_float(get_csv_value(row, 'product sales', 'Product Sales', 'Item Price', 'Principal')),
+            shipping_credits=parse_float(get_csv_value(row, 'shipping credits', 'Shipping Credits', 'Shipping')),
+            gift_wrap_credits=parse_float(get_csv_value(row, 'gift wrap credits', 'Gift Wrap Credits')),
+            promotional_rebates=parse_float(get_csv_value(row, 'promotional rebates', 'Promotional Rebates', 'Promotion')),
+            sales_tax_liable=parse_float(get_csv_value(row, 'Total sales tax liable(GST before adjusting TCS)', 'Sales Tax', 'Tax')),
+            tcs_cgst=parse_float(get_csv_value(row, 'TCS-CGST', 'CGST')),
+            tcs_sgst=parse_float(get_csv_value(row, 'TCS-SGST', 'SGST')),
+            tcs_igst=parse_float(get_csv_value(row, 'TCS-IGST', 'IGST')),
+            tds_194o=parse_float(get_csv_value(row, 'TDS (Section 194-O)', 'TDS')),
+            selling_fees=parse_float(get_csv_value(row, 'selling fees', 'Selling Fees', 'Commission', 'Referral Fee')),
+            fba_fees=parse_float(get_csv_value(row, 'fba fees', 'FBA Fees', 'FBA Fee', 'Fulfillment Fee')),
+            other_transaction_fees=parse_float(get_csv_value(row, 'other transaction fees', 'Other Transaction Fees', 'Other Fees')),
+            other_fees=parse_float(get_csv_value(row, 'other', 'Other')),
+            total=txn_total,
+            date=txn_date,
+        )
+        db.add(txn)
+        transactions_created += 1
     
     db.commit()
     print(f"Transactions: {transactions_created} created, {duplicates_skipped} duplicates skipped")

@@ -43,14 +43,14 @@ export default function ProfitBreakdownChart({ data }: ProfitBreakdownChartProps
     { name: 'Bank Transfer', value: data.bank_transfers },
   ].filter(item => item.value > 0);
 
-  const formatCurrency = (value: number) => `₹${value.toLocaleString('en-IN')}`;
+  const formatCurrency = (value: number) => `₹${value?.toLocaleString('en-IN')}`;
   
   // Format in lakhs for display
   const formatLakhs = (value: number) => {
     if (value >= 100000) {
-      return `₹${(value / 100000).toFixed(2)}L`;
+      return `₹${(value / 100000)?.toFixed(2)}L`;
     }
-    return `₹${value.toLocaleString('en-IN')}`;
+    return `₹${value?.toLocaleString('en-IN')}`;
   };
 
   return (
