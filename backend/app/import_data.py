@@ -330,11 +330,24 @@ def import_transactions_from_csv(db: Session, filepath: str, company_id: int):
     }
 
 
-def update_order_statuses_from_transactions(db: Session, company_id: int) -> int:
-    """Update order statuses based on transaction data (refunds, etc.)"""
-    updated_count = 0
+def update_order_statuses_from_transactions(db: Session, company_id: int) -> dict:
+    """Update order statuses based on transaction data
     
-    # Get all refund transactions with order_ids
+    - Orders with 'Order' transactions (payment received) and no refund → 'delivered'
+    - Orders with 'Refund' transactions → 'returned'
+    """
+    returned_count = 0
+    delivered_count = 0
+    
+    # Get all Order transactions (successful shipments with payment)
+    order_txns = db.query(Transaction).filter(
+        Transaction.company_id == company_id,
+        Transaction.type == 'Order',
+        Transaction.order_id != None,
+        Transaction.order_id != ''
+    ).all()
+    
+    # Get all Refund transactions
     refund_txns = db.query(Transaction).filter(
         Transaction.company_id == company_id,
         Transaction.type == 'Refund',
@@ -342,22 +355,38 @@ def update_order_statuses_from_transactions(db: Session, company_id: int) -> int
         Transaction.order_id != ''
     ).all()
     
-    # Collect unique order IDs that have refunds
+    # Collect order IDs
+    shipped_order_ids = set(txn.order_id for txn in order_txns if txn.order_id)
     refunded_order_ids = set(txn.order_id for txn in refund_txns if txn.order_id)
     
+    # Orders that shipped but were NOT refunded → delivered
+    delivered_order_ids = shipped_order_ids - refunded_order_ids
+    
+    # Update delivered orders
+    if delivered_order_ids:
+        orders_to_deliver = db.query(Order).filter(
+            Order.company_id == company_id,
+            Order.amazon_order_id.in_(delivered_order_ids),
+            Order.status.in_(['shipped', 'pending'])
+        ).all()
+        
+        for order in orders_to_deliver:
+            order.status = 'delivered'
+            delivered_count += 1
+    
+    # Update returned orders
     if refunded_order_ids:
-        # Update orders that have refunds to 'returned' status
-        orders_to_update = db.query(Order).filter(
+        orders_to_return = db.query(Order).filter(
             Order.company_id == company_id,
             Order.amazon_order_id.in_(refunded_order_ids),
             Order.status != 'returned'
         ).all()
         
-        for order in orders_to_update:
+        for order in orders_to_return:
             order.status = 'returned'
-            updated_count += 1
-        
-        db.commit()
-        print(f"Updated {updated_count} orders to 'returned' status based on refund transactions")
+            returned_count += 1
     
-    return updated_count
+    db.commit()
+    print(f"Updated statuses: {delivered_count} → delivered, {returned_count} → returned")
+    
+    return {'delivered': delivered_count, 'returned': returned_count}
