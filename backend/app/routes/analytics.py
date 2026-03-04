@@ -269,8 +269,13 @@ def get_transactions_summary(
     fba_fees = 0.0
     other_fees = 0.0
     service_fees = 0.0
+    advertising_fees = 0.0
     settlement_total = 0.0
     bank_transfers = 0.0  # Actual money sent to bank
+    
+    # Track orders and refunds by order_id for cross-referencing
+    orders_by_id = {}  # order_id -> {product_sales, shipping}
+    refunded_order_ids = set()
     
     by_type = {}
     
@@ -289,21 +294,45 @@ def get_transactions_summary(
             selling_fees += abs(txn.selling_fees or 0)
             fba_fees += abs(txn.fba_fees or 0)
             other_fees += abs(txn.other_transaction_fees or 0) + abs(txn.other_fees or 0)
+            # Track by order_id
+            if txn.order_id:
+                if txn.order_id not in orders_by_id:
+                    orders_by_id[txn.order_id] = {'product_sales': 0, 'shipping': 0}
+                orders_by_id[txn.order_id]['product_sales'] += txn.product_sales or 0
+                orders_by_id[txn.order_id]['shipping'] += txn.shipping_credits or 0
         elif txn_type == 'Refund':
             total_refunds += abs(txn.product_sales or 0) + abs(txn.shipping_credits or 0)
             refund_count += 1
+            # Track refunded order_ids
+            if txn.order_id:
+                refunded_order_ids.add(txn.order_id)
             # Fees refunded back
             selling_fees += abs(txn.selling_fees or 0)  # Usually negative (refund)
             fba_fees += abs(txn.fba_fees or 0)
         elif 'Reimbursement' in txn_type or 'FBA' in txn_type or 'Fulfilment Fee Refund' in txn_type:
             total_reimbursements += txn.total or 0
             reimbursement_count += 1
-        elif 'Service' in txn_type or 'Shipping' in txn_type:
+        elif txn_type == 'Service Fee':
+            # Separate advertising from other service fees
+            if txn.description and 'Advertising' in txn.description:
+                advertising_fees += abs(txn.total or 0)
+            else:
+                service_fees += abs(txn.total or 0)
+        elif 'Shipping' in txn_type:
             service_fees += abs(txn.total or 0)
         elif txn_type == 'Transfer':
             bank_transfers += abs(txn.total or 0)  # Transfers are negative, so abs()
     
-    total_fees = selling_fees + fba_fees + other_fees + service_fees
+    # Calculate fulfilled sales (orders without refunds) - matches TheEcomWay calculation
+    fulfilled_order_ids = set(orders_by_id.keys()) - refunded_order_ids
+    fulfilled_sales = sum(
+        orders_by_id[oid]['product_sales'] + orders_by_id[oid]['shipping'] 
+        for oid in fulfilled_order_ids
+    )
+    fulfilled_order_count = len(fulfilled_order_ids)
+    refunded_order_count = len(set(orders_by_id.keys()) & refunded_order_ids)
+    
+    total_fees = selling_fees + fba_fees + other_fees + service_fees + advertising_fees
     net_revenue = gross_sales + gross_shipping - total_refunds
     
     # Calculate actual COGS from order items (using COGS set via COGS management)
@@ -337,13 +366,17 @@ def get_transactions_summary(
             "fba_fees": round(fba_fees, 2),
             "other_fees": round(other_fees, 2),
             "service_fees": round(service_fees, 2),
+            "advertising_fees": round(advertising_fees, 2),
             "total_fees": round(total_fees, 2),
             "settlement_amount": round(settlement_total, 2),
             "bank_transfers": round(bank_transfers, 2),
             "actual_cogs": round(actual_cogs, 2),
             "cogs_is_estimated": cogs_is_estimated,
             "true_profit": round(true_profit, 2),
-            "true_profit_margin": round(true_profit_margin, 2)
+            "true_profit_margin": round(true_profit_margin, 2),
+            "fulfilled_sales": round(fulfilled_sales, 2),
+            "fulfilled_order_count": fulfilled_order_count,
+            "refunded_order_count": refunded_order_count
         },
         "by_type": by_type
     }

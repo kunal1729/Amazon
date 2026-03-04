@@ -31,8 +31,17 @@ def parse_date(value):
     """Parse date from various formats"""
     if not value or value.strip() == '':
         return None
+    
+    # Clean the value - remove UTC suffix
+    cleaned = value.strip()
+    if cleaned.endswith(' UTC'):
+        cleaned = cleaned[:-4]
+    
     formats = [
+        '%d %b %Y %I:%M:%S %p',  # 31 Dec 2025 8:05:31 pm
+        '%d %b %Y %H:%M:%S',     # 31 Dec 2025 20:05:31
         '%Y-%m-%dT%H:%M:%S%z',
+        '%Y-%m-%dT%H:%M:%S',
         '%Y-%m-%d %H:%M:%S',
         '%d-%m-%Y %H:%M:%S',
         '%d/%m/%Y %H:%M:%S',
@@ -41,7 +50,7 @@ def parse_date(value):
     ]
     for fmt in formats:
         try:
-            return datetime.strptime(value.strip(), fmt)
+            return datetime.strptime(cleaned, fmt)
         except ValueError:
             continue
     return None
