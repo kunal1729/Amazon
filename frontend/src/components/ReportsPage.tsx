@@ -31,7 +31,11 @@ interface Financials {
   other_fees: number;
   service_fees: number;
   advertising_fees: number;
+  promotional_rebates: number;
+  tcs_tds: number;
   total_fees: number;
+  shipping_and_fees: number;
+  net_settlement: number;
   total_reimbursements: number;
   reimbursement_count: number;
   bank_transfers: number;
@@ -274,16 +278,50 @@ TOP PRODUCTS BY REVENUE
 
               {/* Fees Section */}
               <div className="px-6 py-4 bg-orange-50">
-                <h3 className="text-sm font-semibold text-orange-800 uppercase tracking-wide mb-3">Amazon Fees</h3>
+                <h3 className="text-sm font-semibold text-orange-800 uppercase tracking-wide mb-3">Shipping & Fees</h3>
                 <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">FBA Fulfillment</span>
+                    <span className="font-medium text-red-600">-₹{financials.fba_fees.toLocaleString('en-IN')}</span>
+                  </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Selling/Referral Fees</span>
                     <span className="font-medium text-red-600">-₹{financials.selling_fees.toLocaleString('en-IN')}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">FBA Fulfillment</span>
-                    <span className="font-medium text-red-600">-₹{financials.fba_fees.toLocaleString('en-IN')}</span>
+                    <span className="text-gray-600">Other Fees</span>
+                    <span className="font-medium text-red-600">-₹{financials.other_fees.toLocaleString('en-IN')}</span>
                   </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Promotional Rebates</span>
+                    <span className="font-medium text-red-600">-₹{(financials.promotional_rebates || 0).toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">TCS/TDS</span>
+                    <span className="font-medium text-red-600">-₹{(financials.tcs_tds || 0).toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t border-orange-200">
+                    <span className="font-semibold text-orange-800">Total Shipping & Fees</span>
+                    <span className="font-bold text-red-600">-₹{(financials.shipping_and_fees || 0).toLocaleString('en-IN')}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Net Settlement */}
+              <div className="px-6 py-4 bg-emerald-50">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <span className="font-semibold text-emerald-800">Net Settlement</span>
+                    <p className="text-xs text-emerald-600">Fulfilled Sales - Shipping & Fees</p>
+                  </div>
+                  <span className="text-xl font-bold text-emerald-700">₹{(financials.net_settlement || 0).toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+
+              {/* Other Charges (Advertising, Service Fees) */}
+              <div className="px-6 py-4 bg-purple-50">
+                <h3 className="text-sm font-semibold text-purple-800 uppercase tracking-wide mb-3">Other Charges</h3>
+                <div className="space-y-2">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Advertising</span>
                     <span className="font-medium text-red-600">-₹{(financials.advertising_fees || 0).toLocaleString('en-IN')}</span>
@@ -292,13 +330,9 @@ TOP PRODUCTS BY REVENUE
                     <span className="text-gray-600">Service Fees</span>
                     <span className="font-medium text-red-600">-₹{financials.service_fees.toLocaleString('en-IN')}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Other Fees</span>
-                    <span className="font-medium text-red-600">-₹{financials.other_fees.toLocaleString('en-IN')}</span>
-                  </div>
-                  <div className="flex justify-between pt-2 border-t border-orange-200">
-                    <span className="font-semibold text-orange-800">Total Fees</span>
-                    <span className="font-bold text-red-600">-₹{financials.total_fees.toLocaleString('en-IN')}</span>
+                  <div className="flex justify-between pt-2 border-t border-purple-200">
+                    <span className="font-semibold text-purple-800">Total Other Charges</span>
+                    <span className="font-bold text-red-600">-₹{(financials.advertising_fees + financials.service_fees).toLocaleString('en-IN')}</span>
                   </div>
                 </div>
               </div>

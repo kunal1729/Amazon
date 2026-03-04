@@ -298,11 +298,13 @@ def get_transactions_summary(
     other_fees = 0.0
     service_fees = 0.0
     advertising_fees = 0.0
+    promotional_rebates = 0.0
+    tcs_tds = 0.0
     settlement_total = 0.0
     bank_transfers = 0.0  # Actual money sent to bank (all settlements included)
     
     # Track orders and refunds by order_id for cross-referencing
-    orders_by_id = {}  # order_id -> {product_sales, shipping}
+    orders_by_id = {}  # order_id -> {product_sales, shipping, fees}
     refunded_order_ids = set()
     
     by_type = {}
@@ -323,10 +325,13 @@ def get_transactions_summary(
             if is_within_cutoff:
                 gross_sales += txn.product_sales or 0
                 gross_shipping += txn.shipping_credits or 0
+                # Fees from ALL orders (TheEcomWay method - fees charged even if later refunded)
                 selling_fees += abs(txn.selling_fees or 0)
                 fba_fees += abs(txn.fba_fees or 0)
                 other_fees += abs(txn.other_transaction_fees or 0) + abs(txn.other_fees or 0)
-                # Track by order_id
+                promotional_rebates += abs(txn.promotional_rebates or 0)
+                tcs_tds += abs(txn.tcs_cgst or 0) + abs(txn.tcs_sgst or 0) + abs(txn.tcs_igst or 0) + abs(txn.tds_194o or 0)
+                # Track by order_id for fulfilled sales calculation
                 if txn.order_id:
                     if txn.order_id not in orders_by_id:
                         orders_by_id[txn.order_id] = {'product_sales': 0, 'shipping': 0}
@@ -339,9 +344,7 @@ def get_transactions_summary(
                 # Track refunded order_ids
                 if txn.order_id:
                     refunded_order_ids.add(txn.order_id)
-                # Fees refunded back
-                selling_fees += abs(txn.selling_fees or 0)
-                fba_fees += abs(txn.fba_fees or 0)
+                # Note: We don't subtract refund fees since TheEcomWay counts all original order fees
         elif 'Reimbursement' in txn_type or 'FBA' in txn_type or 'Fulfilment Fee Refund' in txn_type:
             if is_within_cutoff:
                 total_reimbursements += txn.total or 0
@@ -371,6 +374,12 @@ def get_transactions_summary(
     
     # Store cutoff date info for display
     cutoff_date_str = cutoff_date.strftime('%Y-%m-%d') if cutoff_date else None
+    
+    # Shipping & Fees (TheEcomWay style) - fees from ALL orders, including promotional rebates and taxes
+    shipping_and_fees = fba_fees + selling_fees + other_fees + promotional_rebates + tcs_tds
+    
+    # Net Settlement (calculated) = Fulfilled Sales - Shipping & Fees
+    net_settlement = fulfilled_sales - shipping_and_fees
     
     total_fees = selling_fees + fba_fees + other_fees + service_fees + advertising_fees
     net_revenue = gross_sales + gross_shipping - total_refunds
@@ -408,7 +417,11 @@ def get_transactions_summary(
             "other_fees": round(other_fees, 2),
             "service_fees": round(service_fees, 2),
             "advertising_fees": round(advertising_fees, 2),
+            "promotional_rebates": round(promotional_rebates, 2),
+            "tcs_tds": round(tcs_tds, 2),
             "total_fees": round(total_fees, 2),
+            "shipping_and_fees": round(shipping_and_fees, 2),
+            "net_settlement": round(net_settlement, 2),
             "settlement_amount": round(settlement_total, 2),
             "bank_transfers": round(bank_transfers, 2),
             "actual_cogs": round(actual_cogs, 2),
