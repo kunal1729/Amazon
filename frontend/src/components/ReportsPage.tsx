@@ -53,6 +53,7 @@ export default function ReportsPage() {
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [refunds, setRefunds] = useState<Refund[]>([]);
   const [activeTab, setActiveTab] = useState<'summary' | 'products' | 'refunds'>('summary');
+  const [dataCutoffDate, setDataCutoffDate] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -66,6 +67,7 @@ export default function ReportsPage() {
         getRefunds(COMPANY_ID, 100),
       ]);
       setFinancials(txnRes.data.financials);
+      setDataCutoffDate(txnRes.data.data_cutoff_date);
       setTopProducts(productsRes.data);
       setRefunds(refundsRes.data);
     } catch (error) {
@@ -221,7 +223,14 @@ TOP PRODUCTS BY REVENUE
           {/* P&L Statement */}
           <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
             <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4">
-              <h2 className="text-lg font-semibold text-white">Profit & Loss Statement</h2>
+              <div className="flex justify-between items-center">
+                <h2 className="text-lg font-semibold text-white">Profit & Loss Statement</h2>
+                {dataCutoffDate && (
+                  <span className="text-sm text-indigo-100">
+                    Data through {new Date(dataCutoffDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </span>
+                )}
+              </div>
             </div>
             
             <div className="divide-y divide-gray-100">
