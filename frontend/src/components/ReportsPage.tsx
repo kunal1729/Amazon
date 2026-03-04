@@ -43,6 +43,7 @@ interface Financials {
   fulfilled_sales: number;
   fulfilled_order_count: number;
   refunded_order_count: number;
+  customer_return_loss: number;
 }
 
 const formatCurrency = (value: number) => {
@@ -264,11 +265,15 @@ TOP PRODUCTS BY REVENUE
 
               {/* Deductions Section */}
               <div className="px-6 py-4 bg-red-50">
-                <h3 className="text-sm font-semibold text-red-800 uppercase tracking-wide mb-3">Deductions</h3>
+                <h3 className="text-sm font-semibold text-red-800 uppercase tracking-wide mb-3">Deductions & Returns</h3>
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Refunds ({financials.refund_count} orders)</span>
                     <span className="font-medium text-red-600">-₹{financials.total_refunds.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Customer Return Loss</span>
+                    <span className="font-medium text-red-600">-₹{(financials.customer_return_loss || 0).toLocaleString('en-IN')}</span>
                   </div>
                   <div className="flex justify-between pt-2 border-t border-red-200">
                     <span className="font-semibold">Net Revenue</span>

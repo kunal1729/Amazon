@@ -339,6 +339,7 @@ def get_transactions_summary(
     fulfilled_order_count = 0
     refunded_order_count = 0
     orders_with_txns = 0
+    customer_return_loss = 0.0  # Total loss on refunded orders (negative net settlements)
     
     by_type = {}
     
@@ -389,6 +390,9 @@ def get_transactions_summary(
         
         if has_refund:
             refunded_order_count += 1
+            # Track return loss (negative net settlement on refunded orders)
+            if order_net < 0:
+                customer_return_loss += abs(order_net)
         else:
             fulfilled_order_count += 1
     
@@ -471,7 +475,8 @@ def get_transactions_summary(
             "true_profit_margin": round(true_profit_margin, 2),
             "fulfilled_sales": round(fulfilled_sales, 2),
             "fulfilled_order_count": fulfilled_order_count,
-            "refunded_order_count": refunded_order_count
+            "refunded_order_count": refunded_order_count,
+            "customer_return_loss": round(customer_return_loss, 2)
         },
         "by_type": by_type
     }
