@@ -238,17 +238,26 @@ def get_transactions_summary(
     company_id: int,
     db: Session = Depends(get_db)
 ):
-    """Get comprehensive financial summary from transaction data
+    """Get comprehensive financial summary using Orders as source of truth
     
-    Calculates fees/sales for complete months only, but includes all settlements.
+    Uses Orders table to determine which orders to include, then cross-references
+    with Transactions to calculate fees and settlements. This matches TheEcomWay's
+    calculation method exactly.
     """
-    transactions = db.query(Transaction).filter(
-        Transaction.company_id == company_id
+    from calendar import monthrange
+    from datetime import datetime
+    from collections import defaultdict
+    
+    # Get all orders (source of truth)
+    orders = db.query(Order).filter(
+        Order.company_id == company_id,
+        Order.status != 'cancelled'  # Exclude cancelled orders
     ).all()
     
-    if not transactions:
+    if not orders:
         return {
             "total_transactions": 0,
+            "total_orders": 0,
             "financials": {
                 "gross_sales": 0, "gross_shipping": 0,
                 "total_refunds": 0, "refund_count": 0,
@@ -261,32 +270,56 @@ def get_transactions_summary(
             "by_type": {}
         }
     
-    # Find the cutoff date - end of last completed month
-    # Get max date from transactions
-    from calendar import monthrange
-    max_date = max((t.date for t in transactions if t.date), default=None)
-    if max_date:
-        # Get last day of previous month (or current if we're past the 28th)
-        if max_date.day <= 28:
-            # Use end of previous month
-            if max_date.month == 1:
-                cutoff_year = max_date.year - 1
+    # Find the cutoff date - end of last completed month based on order dates
+    max_order_date = max((o.purchase_date for o in orders if o.purchase_date), default=None)
+    if max_order_date:
+        if max_order_date.day <= 28:
+            if max_order_date.month == 1:
+                cutoff_year = max_order_date.year - 1
                 cutoff_month = 12
             else:
-                cutoff_year = max_date.year
-                cutoff_month = max_date.month - 1
+                cutoff_year = max_order_date.year
+                cutoff_month = max_order_date.month - 1
         else:
-            # Use end of current month
-            cutoff_year = max_date.year
-            cutoff_month = max_date.month
+            cutoff_year = max_order_date.year
+            cutoff_month = max_order_date.month
         
         cutoff_day = monthrange(cutoff_year, cutoff_month)[1]
-        from datetime import datetime
         cutoff_date = datetime(cutoff_year, cutoff_month, cutoff_day, 23, 59, 59)
+        start_date = datetime(cutoff_year, cutoff_month, 1, 0, 0, 0)
     else:
         cutoff_date = None
+        start_date = None
     
-    # Calculate aggregates
+    # Filter orders within cutoff period
+    if cutoff_date:
+        orders_in_period = [o for o in orders if o.purchase_date and start_date <= o.purchase_date <= cutoff_date]
+    else:
+        orders_in_period = orders
+    
+    # Get order IDs for cross-reference
+    order_ids = [o.amazon_order_id for o in orders_in_period if o.amazon_order_id]
+    
+    # Get all transactions for these orders
+    transactions = db.query(Transaction).filter(
+        Transaction.company_id == company_id,
+        Transaction.order_id.in_(order_ids)
+    ).all() if order_ids else []
+    
+    # Also get service fees and other non-order transactions within cutoff
+    all_transactions = db.query(Transaction).filter(
+        Transaction.company_id == company_id
+    ).all()
+    
+    # Build transaction map by order_id
+    txn_by_order = defaultdict(list)
+    for txn in transactions:
+        if txn.order_id:
+            txn_by_order[txn.order_id].append(txn)
+    
+    # Calculate aggregates by cross-referencing orders with transactions
+    # This matches TheEcomWay's calculation method exactly
+    
     gross_sales = 0.0
     gross_shipping = 0.0
     total_refunds = 0.0
@@ -300,86 +333,86 @@ def get_transactions_summary(
     advertising_fees = 0.0
     promotional_rebates = 0.0
     tcs_tds = 0.0
-    settlement_total = 0.0
-    bank_transfers = 0.0  # Actual money sent to bank (all settlements included)
+    net_settlement = 0.0  # Sum of all transaction totals for matched orders
+    bank_transfers = 0.0
     
-    # Track orders and refunds by order_id for cross-referencing
-    orders_by_id = {}  # order_id -> {product_sales, shipping, fees}
-    refunded_order_ids = set()
+    fulfilled_order_count = 0
+    refunded_order_count = 0
+    orders_with_txns = 0
     
     by_type = {}
     
-    for txn in transactions:
-        txn_type = txn.type or 'Unknown'
-        if txn_type not in by_type:
-            by_type[txn_type] = {"count": 0, "total": 0}
-        by_type[txn_type]["count"] += 1
-        by_type[txn_type]["total"] += txn.total or 0
+    # Process each order from Orders table and cross-reference with transactions
+    for order in orders_in_period:
+        oid = order.amazon_order_id
+        if not oid:
+            continue
+            
+        order_txns = txn_by_order.get(oid, [])
+        if not order_txns:
+            continue  # Order not in transactions (e.g., pending settlement)
         
-        settlement_total += txn.total or 0
+        orders_with_txns += 1
+        has_refund = False
+        order_net = 0.0
         
-        # Check if transaction is within cutoff date for fees/sales calculation
-        is_within_cutoff = (cutoff_date is None or txn.date is None or txn.date <= cutoff_date)
-        
-        if txn_type == 'Order':
-            if is_within_cutoff:
+        for txn in order_txns:
+            txn_type = txn.type or 'Unknown'
+            
+            # Track by type
+            if txn_type not in by_type:
+                by_type[txn_type] = {"count": 0, "total": 0}
+            by_type[txn_type]["count"] += 1
+            by_type[txn_type]["total"] += txn.total or 0
+            
+            # Add to order's net settlement
+            order_net += txn.total or 0
+            
+            if txn_type == 'Order':
                 gross_sales += txn.product_sales or 0
                 gross_shipping += txn.shipping_credits or 0
-                # Fees from ALL orders (TheEcomWay method - fees charged even if later refunded)
                 selling_fees += abs(txn.selling_fees or 0)
                 fba_fees += abs(txn.fba_fees or 0)
                 other_fees += abs(txn.other_transaction_fees or 0) + abs(txn.other_fees or 0)
                 promotional_rebates += abs(txn.promotional_rebates or 0)
                 tcs_tds += abs(txn.tcs_cgst or 0) + abs(txn.tcs_sgst or 0) + abs(txn.tcs_igst or 0) + abs(txn.tds_194o or 0)
-                # Track by order_id for fulfilled sales calculation
-                if txn.order_id:
-                    if txn.order_id not in orders_by_id:
-                        orders_by_id[txn.order_id] = {'product_sales': 0, 'shipping': 0}
-                    orders_by_id[txn.order_id]['product_sales'] += txn.product_sales or 0
-                    orders_by_id[txn.order_id]['shipping'] += txn.shipping_credits or 0
-        elif txn_type == 'Refund':
-            if is_within_cutoff:
-                total_refunds += abs(txn.product_sales or 0) + abs(txn.shipping_credits or 0)
+            elif txn_type == 'Refund':
+                has_refund = True
+                total_refunds += abs(txn.total or 0)
                 refund_count += 1
-                # Track refunded order_ids
-                if txn.order_id:
-                    refunded_order_ids.add(txn.order_id)
-                # Note: We don't subtract refund fees since TheEcomWay counts all original order fees
-        elif 'Reimbursement' in txn_type or 'FBA' in txn_type or 'Fulfilment Fee Refund' in txn_type:
-            if is_within_cutoff:
+            elif 'Reimbursement' in txn_type or 'Fulfilment Fee Refund' in txn_type:
                 total_reimbursements += txn.total or 0
                 reimbursement_count += 1
-        elif txn_type == 'Service Fee':
-            if is_within_cutoff:
-                # Separate advertising from other service fees
-                if txn.description and 'Advertising' in txn.description:
-                    advertising_fees += abs(txn.total or 0)
-                else:
-                    service_fees += abs(txn.total or 0)
-        elif 'Shipping' in txn_type:
-            if is_within_cutoff:
+        
+        # Add order's net to total settlement
+        net_settlement += order_net
+        
+        if has_refund:
+            refunded_order_count += 1
+        else:
+            fulfilled_order_count += 1
+    
+    # Process non-order transactions (service fees, advertising, transfers) from all_transactions
+    for txn in all_transactions:
+        txn_type = txn.type or 'Unknown'
+        is_within_cutoff = (cutoff_date is None or txn.date is None or txn.date <= cutoff_date)
+        
+        if txn_type == 'Service Fee' and is_within_cutoff:
+            if txn.description and 'Advertising' in txn.description:
+                advertising_fees += abs(txn.total or 0)
+            else:
                 service_fees += abs(txn.total or 0)
         elif txn_type == 'Transfer':
-            # Include ALL bank transfers regardless of date
             bank_transfers += abs(txn.total or 0)
-    
-    # Calculate fulfilled sales (orders without refunds) - matches TheEcomWay calculation
-    fulfilled_order_ids = set(orders_by_id.keys()) - refunded_order_ids
-    fulfilled_sales = sum(
-        orders_by_id[oid]['product_sales'] + orders_by_id[oid]['shipping'] 
-        for oid in fulfilled_order_ids
-    )
-    fulfilled_order_count = len(fulfilled_order_ids)
-    refunded_order_count = len(set(orders_by_id.keys()) & refunded_order_ids)
     
     # Store cutoff date info for display
     cutoff_date_str = cutoff_date.strftime('%Y-%m-%d') if cutoff_date else None
     
-    # Shipping & Fees (TheEcomWay style) - fees from ALL orders, including promotional rebates and taxes
-    shipping_and_fees = fba_fees + selling_fees + other_fees + promotional_rebates + tcs_tds
+    # Shipping & Fees (fees from all orders that have transactions)
+    shipping_and_fees = fba_fees + selling_fees + other_fees + promotional_rebates
     
-    # Net Settlement (calculated) = Fulfilled Sales - Shipping & Fees
-    net_settlement = fulfilled_sales - shipping_and_fees
+    # Fulfilled sales = gross sales from orders that weren't refunded
+    fulfilled_sales = gross_sales + gross_shipping - total_refunds
     
     total_fees = selling_fees + fba_fees + other_fees + service_fees + advertising_fees
     net_revenue = gross_sales + gross_shipping - total_refunds
@@ -403,6 +436,8 @@ def get_transactions_summary(
     
     return {
         "total_transactions": len(transactions),
+        "total_orders": len(orders_in_period),
+        "orders_with_transactions": orders_with_txns,
         "data_cutoff_date": cutoff_date_str,
         "financials": {
             "gross_sales": round(gross_sales, 2),
@@ -422,7 +457,6 @@ def get_transactions_summary(
             "total_fees": round(total_fees, 2),
             "shipping_and_fees": round(shipping_and_fees, 2),
             "net_settlement": round(net_settlement, 2),
-            "settlement_amount": round(settlement_total, 2),
             "bank_transfers": round(bank_transfers, 2),
             "actual_cogs": round(actual_cogs, 2),
             "cogs_is_estimated": cogs_is_estimated,
