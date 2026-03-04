@@ -334,7 +334,6 @@ def get_transactions_summary(
     promotional_rebates = 0.0
     tcs_tds = 0.0
     net_settlement = 0.0  # Sum of all transaction totals for matched orders
-    bank_transfers = 0.0
     
     fulfilled_order_count = 0
     refunded_order_count = 0
@@ -412,8 +411,7 @@ def get_transactions_summary(
             # Track ABA fees (account-level fees)
             if txn.description and 'ABA Fee' in txn.description:
                 aba_fees += abs(txn.total or 0)
-        elif txn_type == 'Transfer':
-            bank_transfers += abs(txn.total or 0)
+        # Bank transfers removed - using net_settlement instead
     
     # Store cutoff date info for display
     cutoff_date_str = cutoff_date.strftime('%Y-%m-%d') if cutoff_date else None
@@ -441,8 +439,8 @@ def get_transactions_summary(
     else:
         cogs_is_estimated = False
     
-    true_profit = bank_transfers - actual_cogs
-    true_profit_margin = (true_profit / net_revenue * 100) if net_revenue > 0 else 0
+    true_profit = net_settlement - actual_cogs
+    true_profit_margin = (true_profit / net_settlement * 100) if net_settlement > 0 else 0
     
     return {
         "total_transactions": len(transactions),
@@ -468,7 +466,6 @@ def get_transactions_summary(
             "total_fees": round(total_fees, 2),
             "shipping_and_fees": round(shipping_and_fees, 2),
             "net_settlement": round(net_settlement, 2),
-            "bank_transfers": round(bank_transfers, 2),
             "actual_cogs": round(actual_cogs, 2),
             "cogs_is_estimated": cogs_is_estimated,
             "true_profit": round(true_profit, 2),

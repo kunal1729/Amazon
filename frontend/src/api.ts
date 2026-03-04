@@ -98,7 +98,7 @@ export interface FinancialSummary {
   service_fees: number;
   total_fees: number;
   settlement_amount: number;
-  bank_transfers: number;
+  net_settlement: number;
   actual_cogs: number;
   cogs_is_estimated: boolean;
   true_profit: number;

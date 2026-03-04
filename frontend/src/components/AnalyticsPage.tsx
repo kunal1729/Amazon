@@ -42,11 +42,11 @@ export default function AnalyticsPage() {
   }
 
   const fin = txnSummary?.financials;
-  const bankTransfers = fin?.bank_transfers || 0;  // Actual money sent to bank
+  const netSettlement = fin?.net_settlement || 0;
   const grossRevenue = fin ? fin.gross_sales + fin.gross_shipping : 0;
   const actualCOGS = fin?.actual_cogs || 0;
   const cogsIsEstimated = fin?.cogs_is_estimated || false;
-  const trueProfit = fin?.true_profit || (bankTransfers - actualCOGS);
+  const trueProfit = fin?.true_profit || (netSettlement - actualCOGS);
   const profitMargin = grossRevenue > 0 ? (trueProfit / grossRevenue) * 100 : 0;
 
   // Pie chart data for fee breakdown
@@ -96,8 +96,8 @@ export default function AnalyticsPage() {
             <p className="text-xl font-bold text-green-200">+₹{(fin?.total_reimbursements || 0).toLocaleString('en-IN')}</p>
           </div>
           <div className="bg-white/10 rounded-lg p-4">
-            <p className="text-emerald-100 text-xs">Bank Transfers</p>
-            <p className="text-xl font-bold">₹{bankTransfers.toLocaleString('en-IN')}</p>
+            <p className="text-emerald-100 text-xs">Net Settlement</p>
+            <p className="text-xl font-bold">₹{netSettlement.toLocaleString('en-IN')}</p>
           </div>
         </div>
         <div className="mt-4 pt-4 border-t border-white/20 grid grid-cols-2 md:grid-cols-3 gap-4">

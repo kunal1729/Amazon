@@ -39,7 +39,6 @@ interface Financials {
   net_settlement: number;
   total_reimbursements: number;
   reimbursement_count: number;
-  bank_transfers: number;
   fulfilled_sales: number;
   fulfilled_order_count: number;
   refunded_order_count: number;
@@ -118,7 +117,7 @@ CREDITS
   Reimbursements          +₹${financials.total_reimbursements.toLocaleString('en-IN')}
 
 ═══════════════════════════════════════════════════════════
-BANK TRANSFER (What you received)    ₹${financials.bank_transfers.toLocaleString('en-IN')}
+NET SETTLEMENT                       ₹${financials.net_settlement.toLocaleString('en-IN')}
 ═══════════════════════════════════════════════════════════
 
 TOP PRODUCTS BY REVENUE
@@ -150,8 +149,8 @@ TOP PRODUCTS BY REVENUE
   }
 
   const grossRevenue = financials.gross_sales + financials.gross_shipping;
-  const profitMargin = financials.net_revenue > 0 
-    ? ((financials.bank_transfers / financials.net_revenue) * 100).toFixed(1)
+  const settlementRatio = financials.net_revenue > 0 
+    ? ((financials.net_settlement / financials.net_revenue) * 100).toFixed(1)
     : '0';
 
   return (
@@ -220,9 +219,9 @@ TOP PRODUCTS BY REVENUE
             <div className="bg-white rounded-xl p-5 border border-gray-100">
               <div className="flex items-center gap-2 text-gray-500 text-sm mb-2">
                 <Truck size={16} />
-                Bank Transfer
+                Net Settlement
               </div>
-              <p className="text-2xl font-bold text-indigo-600">{formatCurrency(financials.bank_transfers)}</p>
+              <p className="text-2xl font-bold text-indigo-600">{formatCurrency(financials.net_settlement)}</p>
             </div>
           </div>
 
@@ -360,12 +359,12 @@ TOP PRODUCTS BY REVENUE
               <div className="px-6 py-5 bg-gradient-to-r from-indigo-600 to-purple-600">
                 <div className="flex justify-between items-center">
                   <div>
-                    <p className="text-indigo-200 text-sm">Bank Transfer (What you received)</p>
-                    <p className="text-3xl font-bold text-white">₹{financials.bank_transfers.toLocaleString('en-IN')}</p>
+                    <p className="text-indigo-200 text-sm">Net Settlement</p>
+                    <p className="text-3xl font-bold text-white">₹{financials.net_settlement.toLocaleString('en-IN')}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-indigo-200 text-sm">Settlement Margin</p>
-                    <p className="text-2xl font-bold text-white">{profitMargin}%</p>
+                    <p className="text-indigo-200 text-sm">Settlement Ratio</p>
+                    <p className="text-2xl font-bold text-white">{settlementRatio}%</p>
                   </div>
                 </div>
               </div>

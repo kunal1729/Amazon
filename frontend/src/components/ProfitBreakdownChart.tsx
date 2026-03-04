@@ -17,7 +17,7 @@ interface TransactionFinancials {
   other_fees: number;
   service_fees: number;
   total_fees: number;
-  bank_transfers: number;
+  net_settlement: number;
   total_reimbursements: number;
   actual_cogs?: number;
   cogs_is_estimated?: boolean;
@@ -40,7 +40,6 @@ export default function ProfitBreakdownChart({ data }: ProfitBreakdownChartProps
     { name: 'FBA Fees', value: data.fba_fees },
     { name: 'Service Fees', value: data.service_fees },
     { name: 'Other Fees', value: data.selling_fees + data.other_fees },
-    { name: 'Bank Transfer', value: data.bank_transfers },
   ].filter(item => item.value > 0);
 
   const formatCurrency = (value: number) => `₹${value?.toLocaleString('en-IN')}`;
@@ -98,8 +97,8 @@ export default function ProfitBreakdownChart({ data }: ProfitBreakdownChartProps
           <span className="font-semibold text-green-600">+{formatLakhs(data.total_reimbursements)}</span>
         </div>
         <div className="border-t pt-2 flex justify-between">
-          <span className="text-gray-700 font-medium">Bank Transfer</span>
-          <span className="font-bold text-green-700">{formatLakhs(data.bank_transfers)}</span>
+          <span className="text-gray-700 font-medium">Net Settlement</span>
+          <span className="font-bold text-green-700">{formatLakhs(data.net_settlement)}</span>
         </div>
         {data.actual_cogs !== undefined && data.actual_cogs > 0 && (
           <>

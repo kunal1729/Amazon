@@ -37,7 +37,7 @@ interface TransactionFinancials {
   service_fees: number;
   total_fees: number;
   settlement_amount: number;
-  bank_transfers: number;
+  net_settlement: number;
   total_reimbursements: number;
   actual_cogs: number;
   cogs_is_estimated: boolean;
@@ -156,8 +156,8 @@ export default function Dashboard() {
           color="purple"
         />
         <StatCard
-          title="Bank Transfers"
-          value={txnFinancials?.bank_transfers || 0}
+          title="Net Settlement"
+          value={txnFinancials?.net_settlement || 0}
           icon={Package}
           prefix="₹"
           color="green"
