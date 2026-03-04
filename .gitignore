@@ -46,3 +46,9 @@ temp/
 # SSH keys
 ssh
 ssh.pub
+
+# Data files (uploaded CSVs)
+*.csv
+
+# Screenshots
+ss/
