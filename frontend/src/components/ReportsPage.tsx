@@ -31,6 +31,7 @@ interface Financials {
   other_fees: number;
   service_fees: number;
   advertising_fees: number;
+  aba_fees: number;
   promotional_rebates: number;
   tcs_tds: number;
   total_fees: number;
@@ -318,7 +319,7 @@ TOP PRODUCTS BY REVENUE
                 </div>
               </div>
 
-              {/* Other Charges (Advertising, Service Fees) */}
+              {/* Other Charges (Advertising, ABA, Service Fees) */}
               <div className="px-6 py-4 bg-purple-50">
                 <h3 className="text-sm font-semibold text-purple-800 uppercase tracking-wide mb-3">Other Charges</h3>
                 <div className="space-y-2">
@@ -327,12 +328,16 @@ TOP PRODUCTS BY REVENUE
                     <span className="font-medium text-red-600">-₹{(financials.advertising_fees || 0).toLocaleString('en-IN')}</span>
                   </div>
                   <div className="flex justify-between">
+                    <span className="text-gray-600">ABA Fees</span>
+                    <span className="font-medium text-red-600">-₹{(financials.aba_fees || 0).toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between">
                     <span className="text-gray-600">Service Fees</span>
                     <span className="font-medium text-red-600">-₹{financials.service_fees.toLocaleString('en-IN')}</span>
                   </div>
                   <div className="flex justify-between pt-2 border-t border-purple-200">
                     <span className="font-semibold text-purple-800">Total Other Charges</span>
-                    <span className="font-bold text-red-600">-₹{(financials.advertising_fees + financials.service_fees).toLocaleString('en-IN')}</span>
+                    <span className="font-bold text-red-600">-₹{((financials.advertising_fees || 0) + (financials.aba_fees || 0) + financials.service_fees).toLocaleString('en-IN')}</span>
                   </div>
                 </div>
               </div>

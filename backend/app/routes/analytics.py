@@ -392,16 +392,22 @@ def get_transactions_summary(
         else:
             fulfilled_order_count += 1
     
-    # Process non-order transactions (service fees, advertising, transfers) from all_transactions
+    # Process non-order transactions (service fees, advertising, ABA fees, transfers) from all_transactions
+    aba_fees = 0.0
     for txn in all_transactions:
         txn_type = txn.type or 'Unknown'
         is_within_cutoff = (cutoff_date is None or txn.date is None or txn.date <= cutoff_date)
+        is_within_month = (start_date is None or txn.date is None or (start_date <= txn.date <= cutoff_date))
         
         if txn_type == 'Service Fee' and is_within_cutoff:
             if txn.description and 'Advertising' in txn.description:
                 advertising_fees += abs(txn.total or 0)
             else:
                 service_fees += abs(txn.total or 0)
+        elif txn_type == 'Others' and is_within_month:
+            # Track ABA fees (account-level fees)
+            if txn.description and 'ABA Fee' in txn.description:
+                aba_fees += abs(txn.total or 0)
         elif txn_type == 'Transfer':
             bank_transfers += abs(txn.total or 0)
     
@@ -414,7 +420,7 @@ def get_transactions_summary(
     # Fulfilled sales = gross sales from orders that weren't refunded
     fulfilled_sales = gross_sales + gross_shipping - total_refunds
     
-    total_fees = selling_fees + fba_fees + other_fees + service_fees + advertising_fees
+    total_fees = selling_fees + fba_fees + other_fees + service_fees + advertising_fees + aba_fees
     net_revenue = gross_sales + gross_shipping - total_refunds
     
     # Calculate actual COGS from order items (using COGS set via COGS management)
@@ -452,6 +458,7 @@ def get_transactions_summary(
             "other_fees": round(other_fees, 2),
             "service_fees": round(service_fees, 2),
             "advertising_fees": round(advertising_fees, 2),
+            "aba_fees": round(aba_fees, 2),
             "promotional_rebates": round(promotional_rebates, 2),
             "tcs_tds": round(tcs_tds, 2),
             "total_fees": round(total_fees, 2),
