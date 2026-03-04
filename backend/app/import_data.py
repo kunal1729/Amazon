@@ -319,7 +319,45 @@ def import_transactions_from_csv(db: Session, filepath: str, company_id: int):
     
     db.commit()
     print(f"Transactions: {transactions_created} created, {duplicates_skipped} duplicates skipped")
+    
+    # Update order statuses based on refund transactions
+    orders_updated = update_order_statuses_from_transactions(db, company_id)
+    
     return {
         'transactions_created': transactions_created,
-        'duplicates_skipped': duplicates_skipped
+        'duplicates_skipped': duplicates_skipped,
+        'orders_status_updated': orders_updated
     }
+
+
+def update_order_statuses_from_transactions(db: Session, company_id: int) -> int:
+    """Update order statuses based on transaction data (refunds, etc.)"""
+    updated_count = 0
+    
+    # Get all refund transactions with order_ids
+    refund_txns = db.query(Transaction).filter(
+        Transaction.company_id == company_id,
+        Transaction.type == 'Refund',
+        Transaction.order_id != None,
+        Transaction.order_id != ''
+    ).all()
+    
+    # Collect unique order IDs that have refunds
+    refunded_order_ids = set(txn.order_id for txn in refund_txns if txn.order_id)
+    
+    if refunded_order_ids:
+        # Update orders that have refunds to 'returned' status
+        orders_to_update = db.query(Order).filter(
+            Order.company_id == company_id,
+            Order.amazon_order_id.in_(refunded_order_ids),
+            Order.status != 'returned'
+        ).all()
+        
+        for order in orders_to_update:
+            order.status = 'returned'
+            updated_count += 1
+        
+        db.commit()
+        print(f"Updated {updated_count} orders to 'returned' status based on refund transactions")
+    
+    return updated_count
