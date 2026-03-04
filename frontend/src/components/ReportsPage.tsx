@@ -30,10 +30,14 @@ interface Financials {
   fba_fees: number;
   other_fees: number;
   service_fees: number;
+  advertising_fees: number;
   total_fees: number;
   total_reimbursements: number;
   reimbursement_count: number;
   bank_transfers: number;
+  fulfilled_sales: number;
+  fulfilled_order_count: number;
+  refunded_order_count: number;
 }
 
 const formatCurrency = (value: number) => {
@@ -226,8 +230,12 @@ TOP PRODUCTS BY REVENUE
                 <h3 className="text-sm font-semibold text-green-800 uppercase tracking-wide mb-3">Revenue</h3>
                 <div className="space-y-2">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Product Sales</span>
-                    <span className="font-medium">₹{financials.gross_sales.toLocaleString('en-IN')}</span>
+                    <span className="text-gray-600">Product Sales (All Orders)</span>
+                    <span className="font-medium text-gray-400">₹{financials.gross_sales.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Fulfilled Sales ({financials.fulfilled_order_count || 0} orders)</span>
+                    <span className="font-medium">₹{(financials.fulfilled_sales || 0).toLocaleString('en-IN')}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Shipping Credits</span>
@@ -266,6 +274,10 @@ TOP PRODUCTS BY REVENUE
                   <div className="flex justify-between">
                     <span className="text-gray-600">FBA Fulfillment</span>
                     <span className="font-medium text-red-600">-₹{financials.fba_fees.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Advertising</span>
+                    <span className="font-medium text-red-600">-₹{(financials.advertising_fees || 0).toLocaleString('en-IN')}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Service Fees</span>
