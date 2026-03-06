@@ -147,6 +147,60 @@ pip install -r requirements.txt
 - **Gross Profit** = Revenue - COGS - Amazon Fees
 - **Net Profit** = Gross Profit - Expenses (advertising, storage, etc.)
 
+## Amazon Transaction Fee Types
+
+### Order-Level Fees (deducted per order)
+
+| Fee | CSV Column | Description |
+|-----|------------|-------------|
+| Selling Fees | `selling fees` | Referral/commission fees (percentage of sale) |
+| FBA Fees | `fba fees` | Fulfillment fees (pick, pack, ship) |
+| Other Transaction Fees | `other transaction fees` | Shipping chargebacks, holdbacks, sales tax collection fees |
+
+### Tax Deductions (per order)
+
+| Fee | CSV Column | Description |
+|-----|------------|-------------|
+| TCS-CGST | `TCS-CGST` | Tax Collected at Source - Central GST |
+| TCS-SGST | `TCS-SGST` | Tax Collected at Source - State GST |
+| TCS-IGST | `TCS-IGST` | Tax Collected at Source - Integrated GST |
+| TDS 194-O | `TDS (Section 194-O)` | Tax Deducted at Source |
+
+### Account-Level Fees (separate transactions)
+
+| Transaction Type | Description | CSV Column |
+|------------------|-------------|------------|
+| Service Fee | Cost of Advertising | `other` |
+| Service Fee | Subscription (Prime, etc.) | `other` |
+| Others | ABA Fee (Amazon Business Account) | `other` |
+| FBA Inventory Fee | FBA storage fee | `other` |
+| Shipping Services | Easy Ship weight handling fees | `other` |
+
+### Adjustments & Credits
+
+| Transaction Type | Description |
+|------------------|-------------|
+| Fulfilment Fee Refund | FBA fee refunds (for customer returns) |
+| Reimbursements | Amazon reimbursements for lost/damaged inventory |
+| SAFE-T Reimbursement | Seller Assurance for eCommerce Transactions |
+| Debt | Outstanding balance adjustments |
+
+### Transaction Types in CSV
+
+| Type | Description |
+|------|-------------|
+| `Order` | Regular order with payment received |
+| `Refund` | Customer refund processed |
+| `Transfer` | Money transferred to bank account |
+| `Service Fee` | Advertising, subscription charges |
+| `Others` | ABA fees, miscellaneous |
+| `Shipping Services` | Easy Ship handling fees |
+| `FBA Inventory Fee` | Storage fees |
+| `Fulfilment Fee Refund` | FBA fee credits |
+| `Reimbursements` | Amazon reimbursements |
+| `SAFE-T Reimbursement` | SAFE-T claim payouts |
+| `Debt` | Outstanding balance |
+
 ## License
 
 MIT
