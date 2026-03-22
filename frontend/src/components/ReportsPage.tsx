@@ -9,13 +9,16 @@ import {
   Truck,
   CreditCard,
   Loader2,
+  FileSpreadsheet,
 } from 'lucide-react';
 import {
   getTransactionsSummary,
   getTopProducts,
   getRefunds,
+  getSKUAnalytics,
   type TopProduct,
   type Refund,
+  type SKUAnalytics,
 } from '../api';
 
 const COMPANY_ID = 1;
@@ -57,8 +60,13 @@ export default function ReportsPage() {
   const [financials, setFinancials] = useState<Financials | null>(null);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [refunds, setRefunds] = useState<Refund[]>([]);
-  const [activeTab, setActiveTab] = useState<'summary' | 'products' | 'refunds'>('summary');
+  const [skuAnalytics, setSKUAnalytics] = useState<SKUAnalytics[]>([]);
+  const [activeTab, setActiveTab] = useState<'summary' | 'products' | 'sku' | 'refunds'>('summary');
   const [dataCutoffDate, setDataCutoffDate] = useState<string | null>(null);
+  const [sortConfig, setSortConfig] = useState<{ key: keyof SKUAnalytics; direction: 'asc' | 'desc' }>({
+    key: 'revenue',
+    direction: 'desc',
+  });
 
   useEffect(() => {
     loadData();
@@ -66,20 +74,38 @@ export default function ReportsPage() {
 
   const loadData = async () => {
     try {
-      const [txnRes, productsRes, refundsRes] = await Promise.all([
+      const [txnRes, productsRes, refundsRes, skuRes] = await Promise.all([
         getTransactionsSummary(COMPANY_ID),
         getTopProducts(COMPANY_ID, 20),
         getRefunds(COMPANY_ID, 100),
+        getSKUAnalytics(COMPANY_ID),
       ]);
       setFinancials(txnRes.data.financials);
       setDataCutoffDate(txnRes.data.data_cutoff_date);
       setTopProducts(productsRes.data);
       setRefunds(refundsRes.data);
+      setSKUAnalytics(skuRes.data);
     } catch (error) {
       console.error('Error loading reports:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const sortedSKUAnalytics = [...skuAnalytics].sort((a, b) => {
+    const aVal = a[sortConfig.key];
+    const bVal = b[sortConfig.key];
+    if (typeof aVal === 'number' && typeof bVal === 'number') {
+      return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
+    }
+    return 0;
+  });
+
+  const handleSort = (key: keyof SKUAnalytics) => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc',
+    }));
   };
 
   const downloadReport = () => {
@@ -136,6 +162,34 @@ TOP PRODUCTS BY REVENUE
     link.click();
   };
 
+  const downloadSKUCSV = () => {
+    if (skuAnalytics.length === 0) return;
+    
+    const headers = ['SKU', 'Title', 'ASIN', 'Orders', 'Refunds', 'Return %', 'Units Sold', 'Revenue', 'Net Revenue', 'Fees', 'COGS', 'Gross Profit', 'Profit Margin %'];
+    const rows = skuAnalytics.map(sku => [
+      sku.sku,
+      `"${sku.title.replace(/"/g, '""')}"`,
+      sku.asin,
+      sku.orders,
+      sku.refunds,
+      sku.return_rate,
+      sku.units_sold,
+      sku.revenue,
+      sku.net_revenue,
+      sku.fees,
+      sku.cogs,
+      sku.gross_profit,
+      sku.profit_margin,
+    ]);
+    
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `sku-analytics-${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -174,6 +228,7 @@ TOP PRODUCTS BY REVENUE
         {[
           { id: 'summary', label: 'P&L Summary' },
           { id: 'products', label: 'Top Products' },
+          { id: 'sku', label: 'SKU Analytics' },
           { id: 'refunds', label: 'Refunds' },
         ].map((tab) => (
           <button
@@ -418,6 +473,112 @@ TOP PRODUCTS BY REVENUE
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* SKU Analytics Tab */}
+      {activeTab === 'sku' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">SKU-Level Analytics</h2>
+              <p className="text-sm text-gray-500">Profit and return analysis by SKU</p>
+            </div>
+            <button
+              onClick={downloadSKUCSV}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
+            >
+              <FileSpreadsheet size={16} />
+              Export CSV
+            </button>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">#</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500">SKU / Product</th>
+                    <th 
+                      className="px-4 py-3 text-right text-xs font-semibold text-gray-500 cursor-pointer hover:text-indigo-600"
+                      onClick={() => handleSort('orders')}
+                    >
+                      Orders {sortConfig.key === 'orders' && (sortConfig.direction === 'desc' ? '↓' : '↑')}
+                    </th>
+                    <th 
+                      className="px-4 py-3 text-right text-xs font-semibold text-gray-500 cursor-pointer hover:text-indigo-600"
+                      onClick={() => handleSort('return_rate')}
+                    >
+                      Return % {sortConfig.key === 'return_rate' && (sortConfig.direction === 'desc' ? '↓' : '↑')}
+                    </th>
+                    <th 
+                      className="px-4 py-3 text-right text-xs font-semibold text-gray-500 cursor-pointer hover:text-indigo-600"
+                      onClick={() => handleSort('revenue')}
+                    >
+                      Revenue {sortConfig.key === 'revenue' && (sortConfig.direction === 'desc' ? '↓' : '↑')}
+                    </th>
+                    <th 
+                      className="px-4 py-3 text-right text-xs font-semibold text-gray-500 cursor-pointer hover:text-indigo-600"
+                      onClick={() => handleSort('gross_profit')}
+                    >
+                      Profit {sortConfig.key === 'gross_profit' && (sortConfig.direction === 'desc' ? '↓' : '↑')}
+                    </th>
+                    <th 
+                      className="px-4 py-3 text-right text-xs font-semibold text-gray-500 cursor-pointer hover:text-indigo-600"
+                      onClick={() => handleSort('profit_margin')}
+                    >
+                      Margin {sortConfig.key === 'profit_margin' && (sortConfig.direction === 'desc' ? '↓' : '↑')}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {sortedSKUAnalytics.map((sku, index) => (
+                    <tr key={sku.sku} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm text-gray-500">{index + 1}</td>
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-gray-900 truncate max-w-xs">{sku.title}</p>
+                        <p className="text-xs text-gray-500">{sku.sku}</p>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right">
+                        <span className="text-gray-900">{sku.orders}</span>
+                        {sku.refunds > 0 && (
+                          <span className="text-red-500 text-xs ml-1">(-{sku.refunds})</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          sku.return_rate > 20 ? 'bg-red-100 text-red-700' :
+                          sku.return_rate > 10 ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-green-100 text-green-700'
+                        }`}>
+                          {sku.return_rate}%
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right font-medium">
+                        ₹{sku.revenue.toLocaleString('en-IN')}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right">
+                        <span className={sku.gross_profit >= 0 ? 'text-green-600' : 'text-red-600'}>
+                          ₹{sku.gross_profit.toLocaleString('en-IN')}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          sku.profit_margin >= 30 ? 'bg-green-100 text-green-700' :
+                          sku.profit_margin >= 15 ? 'bg-yellow-100 text-yellow-700' :
+                          sku.profit_margin >= 0 ? 'bg-orange-100 text-orange-700' :
+                          'bg-red-100 text-red-700'
+                        }`}>
+                          {sku.profit_margin}%
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 

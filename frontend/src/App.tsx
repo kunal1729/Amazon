@@ -6,6 +6,8 @@ import OrdersPage from './components/OrdersPage';
 import COGSPage from './components/COGSPage';
 import InventoryPage from './components/InventoryPage';
 import AnalyticsPage from './components/AnalyticsPage';
+import GeoAnalyticsPage from './components/GeoAnalyticsPage';
+import ReconciliationPage from './components/ReconciliationPage';
 import ReportsPage from './components/ReportsPage';
 import SettingsPage from './components/SettingsPage';
 
@@ -22,6 +24,8 @@ function App() {
         {activeTab === 'cogs' && <COGSPage />}
         {activeTab === 'inventory' && <InventoryPage />}
         {activeTab === 'analytics' && <AnalyticsPage />}
+        {activeTab === 'geo' && <GeoAnalyticsPage />}
+        {activeTab === 'reconciliation' && <ReconciliationPage />}
         {activeTab === 'reports' && <ReportsPage />}
         {activeTab === 'settings' && <SettingsPage onNavigate={setActiveTab} />}
       </main>

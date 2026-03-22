@@ -499,3 +499,290 @@ def get_refunds(
         "shipping_refund": abs(r.shipping_credits or 0),
         "amount": abs((r.product_sales or 0) + (r.shipping_credits or 0))
     } for r in refunds]
+
+
+@router.get("/sku-analytics/{company_id}")
+def get_sku_analytics(
+    company_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get SKU-level analytics including profit, revenue, and return rate"""
+    from collections import defaultdict
+    
+    # Get all transactions grouped by SKU
+    transactions = db.query(Transaction).filter(
+        Transaction.company_id == company_id,
+        Transaction.sku != None,
+        Transaction.sku != ''
+    ).all()
+    
+    # Get products for COGS data
+    products = db.query(Product).filter(Product.company_id == company_id).all()
+    product_costs = {p.sku: p.unit_cost for p in products}
+    product_titles = {p.sku: p.title for p in products}
+    product_asins = {p.sku: p.asin for p in products}
+    
+    sku_data = defaultdict(lambda: {
+        'orders': 0, 'refunds': 0, 'units_sold': 0, 'units_refunded': 0,
+        'revenue': 0.0, 'refund_amount': 0.0, 'fees': 0.0, 'net_total': 0.0
+    })
+    
+    for txn in transactions:
+        sku = txn.sku
+        if txn.type == 'Order':
+            sku_data[sku]['orders'] += 1
+            sku_data[sku]['units_sold'] += txn.quantity or 0
+            sku_data[sku]['revenue'] += (txn.product_sales or 0) + (txn.shipping_credits or 0)
+            sku_data[sku]['fees'] += abs(txn.selling_fees or 0) + abs(txn.fba_fees or 0) + abs(txn.other_transaction_fees or 0)
+            sku_data[sku]['net_total'] += txn.total or 0
+        elif txn.type == 'Refund':
+            sku_data[sku]['refunds'] += 1
+            sku_data[sku]['units_refunded'] += abs(txn.quantity or 0)
+            sku_data[sku]['refund_amount'] += abs((txn.product_sales or 0) + (txn.shipping_credits or 0))
+    
+    # Calculate metrics for each SKU
+    result = []
+    for sku, data in sku_data.items():
+        total_orders = data['orders'] + data['refunds']
+        return_rate = (data['refunds'] / data['orders'] * 100) if data['orders'] > 0 else 0
+        
+        unit_cost = product_costs.get(sku, 0)
+        cogs = unit_cost * data['units_sold']
+        
+        net_revenue = data['revenue'] - data['refund_amount']
+        gross_profit = net_revenue - data['fees'] - cogs
+        profit_margin = (gross_profit / net_revenue * 100) if net_revenue > 0 else 0
+        
+        result.append({
+            'sku': sku,
+            'title': product_titles.get(sku, sku),
+            'asin': product_asins.get(sku, ''),
+            'orders': data['orders'],
+            'refunds': data['refunds'],
+            'return_rate': round(return_rate, 1),
+            'units_sold': data['units_sold'],
+            'units_refunded': data['units_refunded'],
+            'revenue': round(data['revenue'], 2),
+            'refund_amount': round(data['refund_amount'], 2),
+            'net_revenue': round(net_revenue, 2),
+            'fees': round(data['fees'], 2),
+            'cogs': round(cogs, 2),
+            'gross_profit': round(gross_profit, 2),
+            'profit_margin': round(profit_margin, 1),
+            'net_settlement': round(data['net_total'], 2)
+        })
+    
+    # Sort by revenue descending
+    result.sort(key=lambda x: x['revenue'], reverse=True)
+    return result
+
+
+@router.get("/geo-analytics/{company_id}")
+def get_geo_analytics(
+    company_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get state-wise and city-wise analytics"""
+    from collections import defaultdict
+    
+    transactions = db.query(Transaction).filter(
+        Transaction.company_id == company_id,
+        Transaction.type.in_(['Order', 'Refund'])
+    ).all()
+    
+    state_data = defaultdict(lambda: {
+        'orders': 0, 'refunds': 0, 'revenue': 0.0, 'refund_amount': 0.0, 'net_total': 0.0
+    })
+    city_data = defaultdict(lambda: {
+        'orders': 0, 'refunds': 0, 'revenue': 0.0, 'state': ''
+    })
+    
+    for txn in transactions:
+        state = (txn.order_state or 'Unknown').strip().upper()
+        city = (txn.order_city or 'Unknown').strip().title()
+        
+        if txn.type == 'Order':
+            state_data[state]['orders'] += 1
+            state_data[state]['revenue'] += (txn.product_sales or 0) + (txn.shipping_credits or 0)
+            state_data[state]['net_total'] += txn.total or 0
+            
+            city_data[city]['orders'] += 1
+            city_data[city]['revenue'] += (txn.product_sales or 0) + (txn.shipping_credits or 0)
+            city_data[city]['state'] = state
+        elif txn.type == 'Refund':
+            state_data[state]['refunds'] += 1
+            state_data[state]['refund_amount'] += abs((txn.product_sales or 0) + (txn.shipping_credits or 0))
+            
+            city_data[city]['refunds'] += 1
+    
+    # Build state results
+    states = []
+    for state, data in state_data.items():
+        if state and state != 'UNKNOWN':
+            return_rate = (data['refunds'] / data['orders'] * 100) if data['orders'] > 0 else 0
+            states.append({
+                'state': state,
+                'orders': data['orders'],
+                'refunds': data['refunds'],
+                'return_rate': round(return_rate, 1),
+                'revenue': round(data['revenue'], 2),
+                'refund_amount': round(data['refund_amount'], 2),
+                'net_revenue': round(data['revenue'] - data['refund_amount'], 2),
+                'net_settlement': round(data['net_total'], 2)
+            })
+    
+    # Sort by revenue
+    states.sort(key=lambda x: x['revenue'], reverse=True)
+    
+    # Build city results (top 50)
+    cities = []
+    for city, data in city_data.items():
+        if city and city != 'Unknown':
+            return_rate = (data['refunds'] / data['orders'] * 100) if data['orders'] > 0 else 0
+            cities.append({
+                'city': city,
+                'state': data['state'],
+                'orders': data['orders'],
+                'refunds': data['refunds'],
+                'return_rate': round(return_rate, 1),
+                'revenue': round(data['revenue'], 2)
+            })
+    
+    cities.sort(key=lambda x: x['revenue'], reverse=True)
+    
+    return {
+        'states': states,
+        'cities': cities[:50],
+        'total_states': len(states),
+        'total_cities': len(cities)
+    }
+
+
+@router.get("/reconciliation-status/{company_id}")
+def get_reconciliation_status(
+    company_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get reconciliation status - matched vs unmatched orders"""
+    # Get all orders
+    orders = db.query(Order).filter(
+        Order.company_id == company_id,
+        Order.status != 'cancelled'
+    ).all()
+    
+    order_ids = {o.amazon_order_id for o in orders if o.amazon_order_id}
+    
+    # Get all transactions with order IDs
+    transactions = db.query(Transaction).filter(
+        Transaction.company_id == company_id,
+        Transaction.order_id != None,
+        Transaction.order_id != ''
+    ).all()
+    
+    txn_order_ids = {t.order_id for t in transactions if t.order_id}
+    
+    # Calculate matches
+    matched_orders = order_ids & txn_order_ids
+    unmatched_orders = order_ids - txn_order_ids
+    orphan_transactions = txn_order_ids - order_ids
+    
+    # Get matched order details with settlement amounts
+    matched_details = []
+    for order in orders:
+        if order.amazon_order_id in matched_orders:
+            order_txns = [t for t in transactions if t.order_id == order.amazon_order_id]
+            settlement = sum(t.total or 0 for t in order_txns)
+            has_refund = any(t.type == 'Refund' for t in order_txns)
+            matched_details.append({
+                'order_id': order.amazon_order_id,
+                'order_revenue': order.total_revenue,
+                'settlement': round(settlement, 2),
+                'status': 'refunded' if has_refund else 'settled',
+                'transaction_count': len(order_txns)
+            })
+    
+    return {
+        'total_orders': len(orders),
+        'matched_orders': len(matched_orders),
+        'unmatched_orders': len(unmatched_orders),
+        'orphan_transactions': len(orphan_transactions),
+        'match_rate': round(len(matched_orders) / len(orders) * 100, 1) if orders else 0,
+        'unmatched_order_ids': list(unmatched_orders)[:20],
+        'matched_details': matched_details[:50]
+    }
+
+
+@router.get("/alerts/{company_id}")
+def get_alerts(
+    company_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get alerts for losses, high returns, and anomalies"""
+    alerts = []
+    
+    # Get SKU analytics for loss detection
+    from collections import defaultdict
+    
+    transactions = db.query(Transaction).filter(
+        Transaction.company_id == company_id,
+        Transaction.sku != None,
+        Transaction.sku != ''
+    ).all()
+    
+    products = db.query(Product).filter(Product.company_id == company_id).all()
+    product_costs = {p.sku: p.unit_cost for p in products}
+    product_titles = {p.sku: p.title for p in products}
+    
+    sku_data = defaultdict(lambda: {
+        'orders': 0, 'refunds': 0, 'revenue': 0.0, 'fees': 0.0
+    })
+    
+    for txn in transactions:
+        sku = txn.sku
+        if txn.type == 'Order':
+            sku_data[sku]['orders'] += 1
+            sku_data[sku]['revenue'] += (txn.product_sales or 0)
+            sku_data[sku]['fees'] += abs(txn.selling_fees or 0) + abs(txn.fba_fees or 0)
+        elif txn.type == 'Refund':
+            sku_data[sku]['refunds'] += 1
+    
+    # Check for high return rates (>20%)
+    for sku, data in sku_data.items():
+        if data['orders'] >= 5:  # Minimum orders threshold
+            return_rate = (data['refunds'] / data['orders'] * 100)
+            if return_rate > 20:
+                alerts.append({
+                    'type': 'high_return',
+                    'severity': 'warning' if return_rate < 40 else 'critical',
+                    'sku': sku,
+                    'title': product_titles.get(sku, sku)[:50],
+                    'message': f'High return rate: {return_rate:.1f}% ({data["refunds"]} of {data["orders"]} orders)',
+                    'value': round(return_rate, 1)
+                })
+    
+    # Check for loss-making SKUs
+    for sku, data in sku_data.items():
+        if data['orders'] >= 3:
+            unit_cost = product_costs.get(sku, 0)
+            cogs = unit_cost * data['orders']
+            profit = data['revenue'] - data['fees'] - cogs
+            if profit < 0:
+                alerts.append({
+                    'type': 'loss_making',
+                    'severity': 'critical',
+                    'sku': sku,
+                    'title': product_titles.get(sku, sku)[:50],
+                    'message': f'Loss-making SKU: ₹{abs(profit):.0f} loss on {data["orders"]} orders',
+                    'value': round(profit, 2)
+                })
+    
+    # Sort by severity
+    severity_order = {'critical': 0, 'warning': 1, 'info': 2}
+    alerts.sort(key=lambda x: severity_order.get(x['severity'], 3))
+    
+    return {
+        'alerts': alerts[:20],
+        'total_alerts': len(alerts),
+        'critical_count': sum(1 for a in alerts if a['severity'] == 'critical'),
+        'warning_count': sum(1 for a in alerts if a['severity'] == 'warning')
+    }

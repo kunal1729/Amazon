@@ -7,6 +7,8 @@ import {
   BarChart3,
   Warehouse,
   Calculator,
+  MapPin,
+  FileCheck,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -21,6 +23,8 @@ const menuItems = [
   { id: 'cogs', label: 'COGS', icon: Calculator },
   { id: 'inventory', label: 'Inventory', icon: Warehouse },
   { id: 'analytics', label: 'Analytics', icon: TrendingUp },
+  { id: 'geo', label: 'Geo Analytics', icon: MapPin },
+  { id: 'reconciliation', label: 'Reconciliation', icon: FileCheck },
   { id: 'reports', label: 'Reports', icon: BarChart3 },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];

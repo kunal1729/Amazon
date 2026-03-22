@@ -235,4 +235,98 @@ export const importCOGSCSV = (file: File) => {
   });
 };
 
+// SKU Analytics
+export interface SKUAnalytics {
+  sku: string;
+  title: string;
+  asin: string;
+  orders: number;
+  refunds: number;
+  return_rate: number;
+  units_sold: number;
+  units_refunded: number;
+  revenue: number;
+  refund_amount: number;
+  net_revenue: number;
+  fees: number;
+  cogs: number;
+  gross_profit: number;
+  profit_margin: number;
+  net_settlement: number;
+}
+
+export const getSKUAnalytics = (companyId: number) =>
+  api.get<SKUAnalytics[]>(`/analytics/sku-analytics/${companyId}`);
+
+// Geo Analytics
+export interface StateAnalytics {
+  state: string;
+  orders: number;
+  refunds: number;
+  return_rate: number;
+  revenue: number;
+  refund_amount: number;
+  net_revenue: number;
+  net_settlement: number;
+}
+
+export interface CityAnalytics {
+  city: string;
+  state: string;
+  orders: number;
+  refunds: number;
+  return_rate: number;
+  revenue: number;
+}
+
+export interface GeoAnalyticsData {
+  states: StateAnalytics[];
+  cities: CityAnalytics[];
+  total_states: number;
+  total_cities: number;
+}
+
+export const getGeoAnalytics = (companyId: number) =>
+  api.get<GeoAnalyticsData>(`/analytics/geo-analytics/${companyId}`);
+
+// Reconciliation Status
+export interface ReconciliationStatus {
+  total_orders: number;
+  matched_orders: number;
+  unmatched_orders: number;
+  orphan_transactions: number;
+  match_rate: number;
+  unmatched_order_ids: string[];
+  matched_details: Array<{
+    order_id: string;
+    order_revenue: number;
+    settlement: number;
+    status: string;
+    transaction_count: number;
+  }>;
+}
+
+export const getReconciliationStatus = (companyId: number) =>
+  api.get<ReconciliationStatus>(`/analytics/reconciliation-status/${companyId}`);
+
+// Alerts
+export interface Alert {
+  type: string;
+  severity: 'critical' | 'warning' | 'info';
+  sku: string;
+  title: string;
+  message: string;
+  value: number;
+}
+
+export interface AlertsData {
+  alerts: Alert[];
+  total_alerts: number;
+  critical_count: number;
+  warning_count: number;
+}
+
+export const getAlerts = (companyId: number) =>
+  api.get<AlertsData>(`/analytics/alerts/${companyId}`);
+
 export default api;

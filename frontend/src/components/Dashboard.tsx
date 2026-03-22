@@ -6,6 +6,8 @@ import {
   Package,
   Percent,
   AlertTriangle,
+  AlertCircle,
+  RotateCcw,
 } from 'lucide-react';
 import StatCard from './StatCard';
 import SalesChart from './SalesChart';
@@ -16,11 +18,13 @@ import {
   getSalesTrend,
   getTopProducts,
   getTransactionsSummary,
+  getAlerts,
 } from '../api';
 import type {
   DashboardSummary,
   SalesTrend,
   TopProduct,
+  Alert,
 } from '../api';
 
 const COMPANY_ID = 1;
@@ -50,6 +54,8 @@ export default function Dashboard() {
   const [txnFinancials, setTxnFinancials] = useState<TransactionFinancials | null>(null);
   const [salesTrend, setSalesTrend] = useState<SalesTrend[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [alertCounts, setAlertCounts] = useState({ critical: 0, warning: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,17 +64,23 @@ export default function Dashboard() {
       setLoading(true);
       setError(null);
 
-      const [summaryRes, txnRes, trendRes, productsRes] = await Promise.all([
+      const [summaryRes, txnRes, trendRes, productsRes, alertsRes] = await Promise.all([
         getDashboardSummary(COMPANY_ID),
         getTransactionsSummary(COMPANY_ID),
         getSalesTrend(COMPANY_ID, 120),
         getTopProducts(COMPANY_ID, 5),
+        getAlerts(COMPANY_ID),
       ]);
 
       setSummary(summaryRes.data);
       setTxnFinancials(txnRes.data.financials);
       setSalesTrend(trendRes.data);
       setTopProducts(productsRes.data);
+      setAlerts(alertsRes.data.alerts);
+      setAlertCounts({
+        critical: alertsRes.data.critical_count,
+        warning: alertsRes.data.warning_count,
+      });
     } catch (err: unknown) {
       console.error('Error loading data:', err);
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
@@ -173,8 +185,73 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div>
-        <TopProductsTable products={topProducts} />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <TopProductsTable products={topProducts} />
+        </div>
+        
+        {/* Alerts Section */}
+        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h3 className="font-semibold text-gray-900">Alerts</h3>
+            {(alertCounts.critical > 0 || alertCounts.warning > 0) && (
+              <div className="flex gap-2">
+                {alertCounts.critical > 0 && (
+                  <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-medium rounded-full">
+                    {alertCounts.critical} critical
+                  </span>
+                )}
+                {alertCounts.warning > 0 && (
+                  <span className="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-medium rounded-full">
+                    {alertCounts.warning} warning
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="divide-y divide-gray-100 max-h-80 overflow-y-auto">
+            {alerts.length === 0 ? (
+              <div className="p-6 text-center text-gray-500">
+                <AlertCircle className="mx-auto mb-2 text-green-500" size={32} />
+                <p className="font-medium text-gray-900">All Clear!</p>
+                <p className="text-sm">No alerts at this time.</p>
+              </div>
+            ) : (
+              alerts.slice(0, 5).map((alert, index) => (
+                <div key={index} className="p-4 hover:bg-gray-50">
+                  <div className="flex items-start gap-3">
+                    <div className={`p-1.5 rounded-lg ${
+                      alert.severity === 'critical' ? 'bg-red-100' : 'bg-yellow-100'
+                    }`}>
+                      {alert.type === 'high_return' ? (
+                        <RotateCcw size={16} className={
+                          alert.severity === 'critical' ? 'text-red-600' : 'text-yellow-600'
+                        } />
+                      ) : (
+                        <AlertTriangle size={16} className={
+                          alert.severity === 'critical' ? 'text-red-600' : 'text-yellow-600'
+                        } />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {alert.title}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5">{alert.message}</p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          {alerts.length > 5 && (
+            <div className="px-6 py-3 border-t border-gray-100 text-center">
+              <span className="text-sm text-indigo-600 font-medium">
+                +{alerts.length - 5} more alerts
+              </span>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
