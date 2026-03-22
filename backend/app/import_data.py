@@ -4,7 +4,7 @@ Data import script for Amazon Seller data
 import csv
 from datetime import datetime
 from sqlalchemy.orm import Session
-from .models import Company, Product, Order, OrderItem, Transaction
+from .models import Company, Product, Order, OrderItem, Transaction, AdCampaign
 
 
 def parse_float(value):
@@ -390,3 +390,129 @@ def update_order_statuses_from_transactions(db: Session, company_id: int) -> dic
     print(f"Updated statuses: {delivered_count} → delivered, {returned_count} → returned")
     
     return {'delivered': delivered_count, 'returned': returned_count}
+
+
+def import_ads_from_csv(db: Session, filepath: str, company_id: int):
+    """Import Amazon Sponsored Products/Brands Report CSV
+    
+    Supports various Amazon ad report formats:
+    - Sponsored Products Search Term Report
+    - Sponsored Products Campaign Report
+    - Sponsored Brands Campaign Report
+    """
+    ads_created = 0
+    ads_updated = 0
+    
+    delimiter = detect_delimiter(filepath)
+    delim_name = 'TAB' if delimiter == '\t' else 'COMMA'
+    print(f"Importing ads report with delimiter: {delim_name}")
+    
+    with open(filepath, 'r', encoding='utf-8-sig') as f:
+        reader = csv.DictReader(f, delimiter=delimiter)
+        
+        # Normalize column names (lowercase, strip whitespace)
+        if reader.fieldnames:
+            normalized_fields = {field.lower().strip(): field for field in reader.fieldnames}
+        else:
+            normalized_fields = {}
+        
+        def get_field(row, *possible_names):
+            """Get field value trying multiple possible column names"""
+            for name in possible_names:
+                name_lower = name.lower().strip()
+                if name_lower in normalized_fields:
+                    return row.get(normalized_fields[name_lower], '')
+            return ''
+        
+        for row in reader:
+            # Campaign info
+            campaign_name = get_field(row, 'campaign name', 'campaign', 'campaignname')
+            campaign_id = get_field(row, 'campaign id', 'campaignid')
+            ad_group_name = get_field(row, 'ad group name', 'ad group', 'adgroupname')
+            ad_group_id = get_field(row, 'ad group id', 'adgroupid')
+            
+            # Product info
+            sku = get_field(row, 'sku', 'advertised sku', 'advertisedsku')
+            asin = get_field(row, 'asin', 'advertised asin', 'advertisedasin')
+            
+            # Skip rows without campaign info
+            if not campaign_name and not sku:
+                continue
+            
+            # Performance metrics
+            impressions = parse_int(get_field(row, 'impressions'))
+            clicks = parse_int(get_field(row, 'clicks'))
+            spend = parse_float(get_field(row, 'spend', 'cost', 'total spend'))
+            sales = parse_float(get_field(row, 'sales', '7 day total sales', '14 day total sales', 'total sales'))
+            orders = parse_int(get_field(row, '7 day total orders', '14 day total orders', 'total orders', 'orders'))
+            units = parse_int(get_field(row, '7 day total units', '14 day total units', 'total units', 'units'))
+            
+            # Date parsing
+            start_date = parse_date(get_field(row, 'start date', 'date', 'report date'))
+            end_date = parse_date(get_field(row, 'end date')) or start_date
+            
+            # Ad type and targeting
+            ad_type = get_field(row, 'campaign type', 'ad type', 'type') or 'Sponsored Products'
+            targeting_type = get_field(row, 'targeting type', 'targeting') or 'Manual'
+            match_type = get_field(row, 'match type', 'matchtype')
+            
+            # Calculate metrics
+            ctr = (clicks / impressions * 100) if impressions > 0 else 0
+            cpc = (spend / clicks) if clicks > 0 else 0
+            acos = (spend / sales * 100) if sales > 0 else 0
+            roas = (sales / spend) if spend > 0 else 0
+            
+            # Check if this campaign/SKU combination exists for the same period
+            existing = db.query(AdCampaign).filter(
+                AdCampaign.company_id == company_id,
+                AdCampaign.campaign_name == campaign_name,
+                AdCampaign.sku == sku,
+                AdCampaign.start_date == start_date
+            ).first()
+            
+            if existing:
+                # Update existing record
+                existing.impressions = impressions
+                existing.clicks = clicks
+                existing.spend = spend
+                existing.sales = sales
+                existing.orders = orders
+                existing.units = units
+                existing.ctr = ctr
+                existing.cpc = cpc
+                existing.acos = acos
+                existing.roas = roas
+                ads_updated += 1
+            else:
+                # Create new record
+                ad = AdCampaign(
+                    company_id=company_id,
+                    campaign_name=campaign_name,
+                    campaign_id=campaign_id,
+                    ad_group_name=ad_group_name,
+                    ad_group_id=ad_group_id,
+                    sku=sku,
+                    asin=asin,
+                    impressions=impressions,
+                    clicks=clicks,
+                    spend=spend,
+                    sales=sales,
+                    orders=orders,
+                    units=units,
+                    ctr=ctr,
+                    cpc=cpc,
+                    acos=acos,
+                    roas=roas,
+                    start_date=start_date,
+                    end_date=end_date,
+                    ad_type=ad_type,
+                    targeting_type=targeting_type,
+                    match_type=match_type
+                )
+                db.add(ad)
+                ads_created += 1
+        
+        db.commit()
+    
+    print(f"Ads import complete: {ads_created} created, {ads_updated} updated")
+    return {'created': ads_created, 'updated': ads_updated}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Upload, FileText, Trash2, CheckCircle, AlertCircle, Loader2, ArrowRight } from 'lucide-react';
-import { uploadOrders, uploadTransactions, clearAllData, getDataStats } from '../api';
+import { uploadOrders, uploadTransactions, uploadAds, clearAllData, getDataStats } from '../api';
 
 interface SettingsPageProps {
   onNavigate: (tab: string) => void;
@@ -24,7 +24,7 @@ export default function SettingsPage({ onNavigate }: SettingsPageProps) {
     }
   };
 
-  const handleFileUpload = async (type: 'orders' | 'transactions', file: File) => {
+  const handleFileUpload = async (type: 'orders' | 'transactions' | 'ads', file: File) => {
     setUploading(type);
     setMessage(null);
     
@@ -32,8 +32,11 @@ export default function SettingsPage({ onNavigate }: SettingsPageProps) {
       if (type === 'orders') {
         const res = await uploadOrders(file);
         setMessage({ type: 'success', text: res.data.message });
-      } else {
+      } else if (type === 'transactions') {
         const res = await uploadTransactions(file);
+        setMessage({ type: 'success', text: res.data.message });
+      } else {
+        const res = await uploadAds(file);
         setMessage({ type: 'success', text: res.data.message });
       }
       
@@ -62,13 +65,13 @@ export default function SettingsPage({ onNavigate }: SettingsPageProps) {
     }
   };
 
-  const handleDrop = (type: 'orders' | 'transactions') => (e: React.DragEvent) => {
+  const handleDrop = (type: 'orders' | 'transactions' | 'ads') => (e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files[0];
     if (file) handleFileUpload(type, file);
   };
 
-  const handleFileSelect = (type: 'orders' | 'transactions') => (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (type: 'orders' | 'transactions' | 'ads') => (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) handleFileUpload(type, file);
   };
@@ -99,7 +102,7 @@ export default function SettingsPage({ onNavigate }: SettingsPageProps) {
       )}
 
       {/* Upload Areas */}
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className="grid md:grid-cols-3 gap-6">
         {/* Orders Upload */}
         <div
           onDrop={handleDrop('orders')}
@@ -165,6 +168,39 @@ export default function SettingsPage({ onNavigate }: SettingsPageProps) {
             <p className="text-xs text-gray-400 mt-3">or drag & drop here</p>
           </div>
         </div>
+
+        {/* Ads Upload */}
+        <div
+          onDrop={handleDrop('ads')}
+          onDragOver={(e) => e.preventDefault()}
+          className="bg-white rounded-xl shadow-sm border-2 border-dashed border-gray-200 p-8 hover:border-orange-400 transition-colors"
+        >
+          <div className="text-center">
+            <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              {uploading === 'ads' ? (
+                <Loader2 className="text-orange-600 animate-spin" size={28} />
+              ) : (
+                <FileText className="text-orange-600" size={28} />
+              )}
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900">Sponsored Products Report</h3>
+            <p className="text-sm text-gray-500 mt-1 mb-4">
+              Upload your Ad Campaign Report (.csv)
+            </p>
+            <label className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 cursor-pointer">
+              <Upload size={18} />
+              Select File
+              <input
+                type="file"
+                accept=".csv,.txt"
+                className="hidden"
+                onChange={handleFileSelect('ads')}
+                disabled={uploading !== null}
+              />
+            </label>
+            <p className="text-xs text-gray-400 mt-3">or drag & drop here</p>
+          </div>
+        </div>
       </div>
 
       {/* Instructions */}
@@ -174,6 +210,7 @@ export default function SettingsPage({ onNavigate }: SettingsPageProps) {
           <li>Go to Amazon Seller Central → Reports</li>
           <li>For Orders: Reports → Fulfillment → All Orders → Request Download</li>
           <li>For Transactions: Reports → Payments → All Statements → Transaction Details</li>
+          <li>For Ads: Advertising → Campaign Manager → Reports → Create Report (Search Term or Campaign)</li>
           <li>Download the files and upload them here</li>
         </ol>
       </div>

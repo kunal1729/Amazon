@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum, Text, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
@@ -11,6 +11,20 @@ class OrderStatus(str, enum.Enum):
     DELIVERED = "delivered"
     CANCELLED = "cancelled"
     RETURNED = "returned"
+
+
+class User(Base):
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    name = Column(String(255), nullable=False)
+    hashed_password = Column(String(255), nullable=False)
+    is_active = Column(Boolean, default=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class Company(Base):
@@ -148,6 +162,48 @@ class Expense(Base):
     description = Column(Text)
     amount = Column(Float, default=0.0)
     date = Column(DateTime)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AdCampaign(Base):
+    __tablename__ = "ad_campaigns"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    
+    # Campaign identifiers
+    campaign_name = Column(String(255))
+    campaign_id = Column(String(100), index=True)
+    ad_group_name = Column(String(255))
+    ad_group_id = Column(String(100))
+    
+    # Product info
+    sku = Column(String(100), index=True)
+    asin = Column(String(20))
+    
+    # Performance metrics
+    impressions = Column(Integer, default=0)
+    clicks = Column(Integer, default=0)
+    spend = Column(Float, default=0.0)
+    sales = Column(Float, default=0.0)  # Attributed sales from ads
+    orders = Column(Integer, default=0)  # Attributed orders from ads
+    units = Column(Integer, default=0)   # Attributed units from ads
+    
+    # Calculated metrics (stored for quick access)
+    ctr = Column(Float, default=0.0)      # Click-through rate
+    cpc = Column(Float, default=0.0)      # Cost per click
+    acos = Column(Float, default=0.0)     # Advertising Cost of Sales
+    roas = Column(Float, default=0.0)     # Return on Ad Spend
+    
+    # Time period
+    start_date = Column(DateTime)
+    end_date = Column(DateTime)
+    
+    # Ad type
+    ad_type = Column(String(50))  # Sponsored Products, Sponsored Brands, etc.
+    targeting_type = Column(String(50))  # Manual, Auto
+    match_type = Column(String(50))  # Exact, Phrase, Broad
     
     created_at = Column(DateTime, default=datetime.utcnow)
 

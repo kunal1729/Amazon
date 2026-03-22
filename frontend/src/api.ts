@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = 'http://localhost:8001/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -8,6 +8,27 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+// Add auth token to requests if available
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('auth_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Handle 401 errors - just clear tokens, let AuthContext handle redirect
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user');
+    }
+    return Promise.reject(error);
+  }
+);
 
 export interface DashboardSummary {
   total_revenue: number;
@@ -328,5 +349,108 @@ export interface AlertsData {
 
 export const getAlerts = (companyId: number) =>
   api.get<AlertsData>(`/analytics/alerts/${companyId}`);
+
+// Ads Analytics
+export interface AdsSummary {
+  total_spend: number;
+  total_ad_sales: number;
+  total_revenue: number;
+  total_impressions: number;
+  total_clicks: number;
+  total_orders: number;
+  acos: number;
+  roas: number;
+  tacos: number;
+  ctr: number;
+  cpc: number;
+  conversion_rate: number;
+  campaigns_count: number;
+  skus_advertised: number;
+}
+
+export interface CampaignPerformance {
+  name: string;
+  ad_type: string;
+  spend: number;
+  sales: number;
+  impressions: number;
+  clicks: number;
+  orders: number;
+  acos: number;
+  roas: number;
+  ctr: number;
+  cpc: number;
+  profitable: boolean;
+}
+
+export interface SKUAdPerformance {
+  sku: string;
+  title: string;
+  spend: number;
+  sales: number;
+  impressions: number;
+  clicks: number;
+  orders: number;
+  acos: number;
+  roas: number;
+  profitable: boolean;
+}
+
+export interface AdsAnalyticsData {
+  has_data: boolean;
+  message?: string;
+  summary: AdsSummary | null;
+  campaigns: CampaignPerformance[];
+  sku_performance: SKUAdPerformance[];
+}
+
+export const getAdsAnalytics = (companyId: number) =>
+  api.get<AdsAnalyticsData>(`/analytics/ads-analytics/${companyId}`);
+
+export const uploadAds = (file: File) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  return api.post('/upload/ads', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+};
+
+// Authentication
+export interface User {
+  id: number;
+  email: string;
+  name: string;
+  is_active: boolean;
+  company_id: number | null;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  token_type: string;
+  user: User;
+}
+
+export interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+export interface SignupData {
+  email: string;
+  name: string;
+  password: string;
+}
+
+export const login = (credentials: LoginCredentials) =>
+  api.post<AuthResponse>('/auth/login', credentials);
+
+export const signup = (data: SignupData) =>
+  api.post<AuthResponse>('/auth/signup', data);
+
+export const getMe = () =>
+  api.get<User>('/auth/me');
+
+export const logout = () =>
+  api.post('/auth/logout');
 
 export default api;

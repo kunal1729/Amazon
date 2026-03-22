@@ -10,7 +10,7 @@ import { getGeoAnalytics, type StateAnalytics, type CityAnalytics } from '../api
 
 const COMPANY_ID = 1;
 
-const INDIA_TOPO_JSON = 'https://raw.githubusercontent.com/deldersveld/topojson/master/countries/india/india-states.json';
+const INDIA_GEO_JSON = '/india-states.json';
 
 const STATE_NAME_MAP: Record<string, string> = {
   'ANDHRA PRADESH': 'Andhra Pradesh',
@@ -194,7 +194,7 @@ export default function GeoAnalyticsPage() {
               style={{ width: '100%', height: '500px' }}
             >
               <ZoomableGroup>
-                <Geographies geography={INDIA_TOPO_JSON}>
+                <Geographies geography={INDIA_GEO_JSON}>
                   {({ geographies }) =>
                     geographies.map((geo) => {
                       const stateName = geo.properties.NAME_1 || geo.properties.name;

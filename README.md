@@ -1,14 +1,32 @@
 # Seller Analytics Platform
 
-A Sellerboard-like profit analytics platform for Amazon/e-commerce sellers. Track revenue, costs, fees, and profit margins in real-time.
+A comprehensive profit analytics and reconciliation platform for Amazon/e-commerce sellers. Track revenue, costs, fees, profit margins, and get actionable insights in real-time.
 
 ## Features
 
+### Core Analytics
 - **Dashboard Overview**: Real-time metrics including revenue, profit, orders, and inventory
 - **Sales Trends**: Visual charts showing revenue and profit over time
 - **Product Analytics**: Track performance of individual products
 - **Profit Breakdown**: Understand where your money goes (COGS, fees, expenses)
-- **Low Stock Alerts**: Get notified when inventory is running low
+- **SKU Analytics**: Profit per SKU with return rates and margins
+- **True Profit Calculation**: Accurate profit after all fees and COGS
+
+### Advanced Features
+- **Geo Analytics**: India map visualization with state/city revenue breakdown
+- **Ads Analytics**: TACOS, ACOS, ROAS metrics and campaign performance
+- **Reconciliation**: Track matched vs unmatched orders with settlements
+- **In-App Alerts**: Automatic detection of loss-making SKUs and high return rates
+- **COGS Management**: Bulk import/export of product costs
+
+### Authentication
+- **User Login/Signup**: Secure JWT-based authentication
+- **Password Hashing**: bcrypt encryption for passwords
+- **Session Management**: Persistent login with token storage
+
+### Data Management
+- **CSV Upload**: Import Amazon Orders, Transactions, and Ad reports
+- **CSV Export**: Export SKU analytics and COGS data
 - **Multi-company Support**: Manage multiple seller accounts
 
 ## Tech Stack
@@ -18,24 +36,29 @@ A Sellerboard-like profit analytics platform for Amazon/e-commerce sellers. Trac
 - **SQLAlchemy** - ORM for database operations
 - **SQLite** (default) / PostgreSQL - Database
 - **Pydantic** - Data validation
+- **JWT** - Authentication tokens
+- **bcrypt** - Password hashing
 
 ### Frontend
 - **React 18** with TypeScript
 - **Vite** - Build tool
 - **Tailwind CSS** - Styling
 - **Recharts** - Data visualization
+- **react-simple-maps** - Geo visualization
 - **Lucide React** - Icons
+- **Axios** - HTTP client
 
 ## Database Schema
 
 ### Core Entities
 
-1. **Company** - Seller accounts with Amazon Seller ID
-2. **Product** - Products with ASIN, SKU, costs, and inventory
-3. **Order** - Orders with items, fees, and revenue
-4. **OrderItem** - Individual items in orders with cost tracking
-5. **Expense** - Business expenses by category
-6. **InventoryHistory** - Stock movement tracking
+1. **User** - User accounts with email, password, company link
+2. **Company** - Seller accounts with Amazon Seller ID
+3. **Product** - Products with ASIN, SKU, costs, and inventory
+4. **Order** - Orders with items, fees, and revenue
+5. **Transaction** - Amazon settlement transactions
+6. **AdCampaign** - Advertising campaign performance data
+7. **Expense** - Business expenses by category
 
 ## Getting Started
 
@@ -55,7 +78,7 @@ cd backend
 python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8001
 
 # Terminal 2 - Frontend
 cd frontend
@@ -65,9 +88,18 @@ npm run dev
 
 Open http://localhost:5173 in your browser.
 
+### First Time Setup
+
+1. Open the app and **Sign up** with your email
+2. Go to **Settings** tab
+3. Upload your **Amazon Orders Report** (.tsv or .csv)
+4. Upload your **Amazon Transactions Report** (.csv)
+5. (Optional) Upload **Sponsored Products Report** for ad analytics
+6. Go to **COGS** tab to set your actual product costs
+
 ### Python 3.13+ / 3.14 Users
 
-If you're using Python 3.13 or newer, you need to install **Rust** first (required to compile pydantic-core):
+If you're using Python 3.13 or newer, you need to install **Rust** first:
 
 ```bash
 # Install Rust
@@ -75,131 +107,92 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
 
 # Then proceed with normal setup
-cd backend
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
 ```
 
-### Importing Your Data
+## Pages & Features
 
-1. Go to **Settings** tab in the app
-2. Upload your **Amazon Orders Report** (.tsv or .csv)
-3. Upload your **Amazon Transactions Report** (.csv)
-4. Go to **COGS** tab to set your actual product costs
-
-### COGS Management
-
-1. Export current products: Click "Export CSV" in COGS tab
-2. Edit the CSV in Excel/Sheets with your actual costs
-3. Import back: Click "Import CSV" to update all COGS
+| Page | Description |
+|------|-------------|
+| **Dashboard** | Overview with key metrics, sales trends, money flow, alerts |
+| **Products** | Product list with revenue, profit, margin per product |
+| **Orders** | Order history with status and filtering |
+| **COGS** | Cost of goods management - import/export CSV |
+| **Inventory** | Stock levels and low stock alerts |
+| **Analytics** | Detailed P&L statement and financial breakdown |
+| **Ads Analytics** | TACOS, ACOS, ROAS, campaign & SKU ad performance |
+| **Geo Analytics** | India map, state-wise and city-wise analytics |
+| **Reconciliation** | Order matching status, settled vs unmatched |
+| **Reports** | P&L reports, SKU analytics with CSV export |
+| **Settings** | Upload data files (Orders, Transactions, Ads) |
 
 ## API Endpoints
 
-### Companies
-- `GET /api/companies` - List all companies
-- `POST /api/companies` - Create a company
-- `GET /api/companies/{id}` - Get company details
-
-### Products
-- `GET /api/products` - List products
-- `GET /api/products/with-profit?company_id=1` - Products with profit data
-- `GET /api/products/low-stock/{company_id}` - Low stock products
-- `POST /api/products` - Create product
-- `PUT /api/products/{id}` - Update product
-
-### Orders
-- `GET /api/orders` - List orders with filters
-- `POST /api/orders` - Create order
-- `PUT /api/orders/{id}/status` - Update order status
+### Authentication
+- `POST /api/auth/signup` - Register new user
+- `POST /api/auth/login` - Login with credentials
+- `GET /api/auth/me` - Get current user
 
 ### Analytics
 - `GET /api/analytics/dashboard/{company_id}` - Dashboard summary
-- `GET /api/analytics/sales-trend/{company_id}` - Sales over time
-- `GET /api/analytics/top-products/{company_id}` - Best selling products
-- `GET /api/analytics/profit-breakdown/{company_id}` - Cost breakdown
+- `GET /api/analytics/transactions-summary/{company_id}` - Financial summary
+- `GET /api/analytics/sku-analytics/{company_id}` - SKU-level analytics
+- `GET /api/analytics/geo-analytics/{company_id}` - State/city breakdown
+- `GET /api/analytics/ads-analytics/{company_id}` - Ad performance metrics
+- `GET /api/analytics/reconciliation-status/{company_id}` - Order matching
+- `GET /api/analytics/alerts/{company_id}` - Loss/return alerts
 
-## How Data is Stored
+### Data Upload
+- `POST /api/upload/orders` - Upload orders CSV
+- `POST /api/upload/transactions` - Upload transactions CSV
+- `POST /api/upload/ads` - Upload ad campaign CSV
 
-### Product Data Structure
-```json
-{
-  "id": 1,
-  "company_id": 1,
-  "asin": "B09ABC1234",
-  "sku": "TG-PHONE-001",
-  "title": "Premium Phone Case",
-  "category": "Electronics",
-  "unit_cost": 3.50,
-  "shipping_cost_per_unit": 0.50,
-  "packaging_cost": 0.25,
-  "fba_fee": 3.22,
-  "referral_fee_percentage": 15.0,
-  "current_stock": 250,
-  "current_price": 24.99
-}
-```
+### Products & Orders
+- `GET /api/products` - List products
+- `GET /api/products/with-profit` - Products with profit data
+- `GET /api/orders` - List orders
 
-### Profit Calculation
-- **Revenue** = Order total (product price × quantity)
-- **COGS** = unit_cost + shipping_cost + packaging_cost
-- **Amazon Fees** = FBA fee + Referral fee (% of sale)
-- **Gross Profit** = Revenue - COGS - Amazon Fees
-- **Net Profit** = Gross Profit - Expenses (advertising, storage, etc.)
+## Key Metrics Explained
+
+### Ad Metrics
+| Metric | Formula | Description |
+|--------|---------|-------------|
+| **TACOS** | Ad Spend ÷ Total Revenue | Total Advertising Cost of Sales |
+| **ACOS** | Ad Spend ÷ Ad Sales | Advertising Cost of Sales |
+| **ROAS** | Ad Sales ÷ Ad Spend | Return on Ad Spend |
+
+### Profit Metrics
+- **Gross Revenue** = Product Sales + Shipping Credits
+- **Net Revenue** = Gross Revenue - Refunds
+- **Net Settlement** = Net Revenue - All Fees
+- **True Profit** = Net Settlement - COGS
 
 ## Amazon Transaction Fee Types
 
-### Order-Level Fees (deducted per order)
+### Order-Level Fees
 
 | Fee | CSV Column | Description |
 |-----|------------|-------------|
-| Selling Fees | `selling fees` | Referral/commission fees (percentage of sale) |
-| FBA Fees | `fba fees` | Fulfillment fees (pick, pack, ship) |
-| Other Transaction Fees | `other transaction fees` | Shipping chargebacks, holdbacks, sales tax collection fees |
+| Selling Fees | `selling fees` | Referral/commission fees |
+| FBA Fees | `fba fees` | Fulfillment fees |
+| Other Transaction Fees | `other transaction fees` | Chargebacks, holdbacks |
 
-### Tax Deductions (per order)
+### Tax Deductions
 
 | Fee | CSV Column | Description |
 |-----|------------|-------------|
-| TCS-CGST | `TCS-CGST` | Tax Collected at Source - Central GST |
-| TCS-SGST | `TCS-SGST` | Tax Collected at Source - State GST |
-| TCS-IGST | `TCS-IGST` | Tax Collected at Source - Integrated GST |
+| TCS-CGST | `TCS-CGST` | Central GST |
+| TCS-SGST | `TCS-SGST` | State GST |
+| TCS-IGST | `TCS-IGST` | Integrated GST |
 | TDS 194-O | `TDS (Section 194-O)` | Tax Deducted at Source |
 
-### Account-Level Fees (separate transactions)
-
-| Transaction Type | Description | CSV Column |
-|------------------|-------------|------------|
-| Service Fee | Cost of Advertising | `other` |
-| Service Fee | Subscription (Prime, etc.) | `other` |
-| Others | ABA Fee (Amazon Business Account) | `other` |
-| FBA Inventory Fee | FBA storage fee | `other` |
-| Shipping Services | Easy Ship weight handling fees | `other` |
-
-### Adjustments & Credits
+### Account-Level Fees
 
 | Transaction Type | Description |
 |------------------|-------------|
-| Fulfilment Fee Refund | FBA fee refunds (for customer returns) |
-| Reimbursements | Amazon reimbursements for lost/damaged inventory |
-| SAFE-T Reimbursement | Seller Assurance for eCommerce Transactions |
-| Debt | Outstanding balance adjustments |
-
-### Transaction Types in CSV
-
-| Type | Description |
-|------|-------------|
-| `Order` | Regular order with payment received |
-| `Refund` | Customer refund processed |
-| `Transfer` | Money transferred to bank account |
-| `Service Fee` | Advertising, subscription charges |
-| `Others` | ABA fees, miscellaneous |
-| `Shipping Services` | Easy Ship handling fees |
-| `FBA Inventory Fee` | Storage fees |
-| `Fulfilment Fee Refund` | FBA fee credits |
-| `Reimbursements` | Amazon reimbursements |
-| `SAFE-T Reimbursement` | SAFE-T claim payouts |
-| `Debt` | Outstanding balance |
+| Service Fee | Cost of Advertising, Subscriptions |
+| Others | ABA Fee (Amazon Business Account) |
+| FBA Inventory Fee | Storage fees |
+| Shipping Services | Easy Ship handling fees |
 
 ## License
 

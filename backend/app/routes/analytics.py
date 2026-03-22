@@ -4,7 +4,7 @@ from sqlalchemy import func, extract
 from datetime import datetime, timedelta
 from typing import List, Optional
 from ..database import get_db
-from ..models import Order, OrderItem, Product, Expense, Transaction
+from ..models import Order, OrderItem, Product, Expense, Transaction, AdCampaign
 from ..schemas import DashboardSummary, SalesTrend, TopProduct
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -785,4 +785,149 @@ def get_alerts(
         'total_alerts': len(alerts),
         'critical_count': sum(1 for a in alerts if a['severity'] == 'critical'),
         'warning_count': sum(1 for a in alerts if a['severity'] == 'warning')
+    }
+
+
+@router.get("/ads-analytics/{company_id}")
+def get_ads_analytics(
+    company_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get advertising analytics including TACOS, ROAS, ACOS"""
+    from collections import defaultdict
+    
+    # Get all ad campaigns
+    ads = db.query(AdCampaign).filter(
+        AdCampaign.company_id == company_id
+    ).all()
+    
+    if not ads:
+        return {
+            'has_data': False,
+            'message': 'No ad data available. Upload an Amazon Sponsored Products report.',
+            'summary': None,
+            'campaigns': [],
+            'sku_performance': []
+        }
+    
+    # Calculate totals
+    total_spend = sum(ad.spend or 0 for ad in ads)
+    total_ad_sales = sum(ad.sales or 0 for ad in ads)
+    total_impressions = sum(ad.impressions or 0 for ad in ads)
+    total_clicks = sum(ad.clicks or 0 for ad in ads)
+    total_orders = sum(ad.orders or 0 for ad in ads)
+    
+    # Get total revenue from transactions for TACOS calculation
+    transactions = db.query(Transaction).filter(
+        Transaction.company_id == company_id,
+        Transaction.type == 'Order'
+    ).all()
+    
+    total_revenue = sum(t.product_sales or 0 for t in transactions)
+    
+    # Calculate key metrics
+    acos = (total_spend / total_ad_sales * 100) if total_ad_sales > 0 else 0
+    roas = (total_ad_sales / total_spend) if total_spend > 0 else 0
+    tacos = (total_spend / total_revenue * 100) if total_revenue > 0 else 0
+    ctr = (total_clicks / total_impressions * 100) if total_impressions > 0 else 0
+    cpc = (total_spend / total_clicks) if total_clicks > 0 else 0
+    conversion_rate = (total_orders / total_clicks * 100) if total_clicks > 0 else 0
+    
+    # Aggregate by campaign
+    campaign_data = defaultdict(lambda: {
+        'spend': 0, 'sales': 0, 'impressions': 0, 'clicks': 0, 'orders': 0
+    })
+    
+    for ad in ads:
+        name = ad.campaign_name or 'Unknown Campaign'
+        campaign_data[name]['spend'] += ad.spend or 0
+        campaign_data[name]['sales'] += ad.sales or 0
+        campaign_data[name]['impressions'] += ad.impressions or 0
+        campaign_data[name]['clicks'] += ad.clicks or 0
+        campaign_data[name]['orders'] += ad.orders or 0
+        campaign_data[name]['ad_type'] = ad.ad_type or 'Sponsored Products'
+    
+    campaigns = []
+    for name, data in campaign_data.items():
+        camp_acos = (data['spend'] / data['sales'] * 100) if data['sales'] > 0 else 0
+        camp_roas = (data['sales'] / data['spend']) if data['spend'] > 0 else 0
+        camp_ctr = (data['clicks'] / data['impressions'] * 100) if data['impressions'] > 0 else 0
+        camp_cpc = (data['spend'] / data['clicks']) if data['clicks'] > 0 else 0
+        
+        campaigns.append({
+            'name': name,
+            'ad_type': data.get('ad_type', 'Sponsored Products'),
+            'spend': round(data['spend'], 2),
+            'sales': round(data['sales'], 2),
+            'impressions': data['impressions'],
+            'clicks': data['clicks'],
+            'orders': data['orders'],
+            'acos': round(camp_acos, 1),
+            'roas': round(camp_roas, 2),
+            'ctr': round(camp_ctr, 2),
+            'cpc': round(camp_cpc, 2),
+            'profitable': camp_acos < 30  # ACOS < 30% considered profitable
+        })
+    
+    # Sort campaigns by spend (highest first)
+    campaigns.sort(key=lambda x: x['spend'], reverse=True)
+    
+    # Aggregate by SKU
+    sku_data = defaultdict(lambda: {
+        'spend': 0, 'sales': 0, 'impressions': 0, 'clicks': 0, 'orders': 0
+    })
+    
+    for ad in ads:
+        if ad.sku:
+            sku_data[ad.sku]['spend'] += ad.spend or 0
+            sku_data[ad.sku]['sales'] += ad.sales or 0
+            sku_data[ad.sku]['impressions'] += ad.impressions or 0
+            sku_data[ad.sku]['clicks'] += ad.clicks or 0
+            sku_data[ad.sku]['orders'] += ad.orders or 0
+    
+    # Get product titles
+    products = db.query(Product).filter(Product.company_id == company_id).all()
+    product_titles = {p.sku: p.title for p in products}
+    
+    sku_performance = []
+    for sku, data in sku_data.items():
+        sku_acos = (data['spend'] / data['sales'] * 100) if data['sales'] > 0 else 0
+        sku_roas = (data['sales'] / data['spend']) if data['spend'] > 0 else 0
+        
+        sku_performance.append({
+            'sku': sku,
+            'title': (product_titles.get(sku, sku) or sku)[:60],
+            'spend': round(data['spend'], 2),
+            'sales': round(data['sales'], 2),
+            'impressions': data['impressions'],
+            'clicks': data['clicks'],
+            'orders': data['orders'],
+            'acos': round(sku_acos, 1),
+            'roas': round(sku_roas, 2),
+            'profitable': sku_acos < 30
+        })
+    
+    # Sort by spend
+    sku_performance.sort(key=lambda x: x['spend'], reverse=True)
+    
+    return {
+        'has_data': True,
+        'summary': {
+            'total_spend': round(total_spend, 2),
+            'total_ad_sales': round(total_ad_sales, 2),
+            'total_revenue': round(total_revenue, 2),
+            'total_impressions': total_impressions,
+            'total_clicks': total_clicks,
+            'total_orders': total_orders,
+            'acos': round(acos, 1),
+            'roas': round(roas, 2),
+            'tacos': round(tacos, 1),
+            'ctr': round(ctr, 2),
+            'cpc': round(cpc, 2),
+            'conversion_rate': round(conversion_rate, 1),
+            'campaigns_count': len(campaigns),
+            'skus_advertised': len(sku_performance)
+        },
+        'campaigns': campaigns[:50],
+        'sku_performance': sku_performance[:50]
     }

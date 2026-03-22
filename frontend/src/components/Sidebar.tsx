@@ -9,11 +9,16 @@ import {
   Calculator,
   MapPin,
   FileCheck,
+  Megaphone,
+  LogOut,
+  User,
 } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  onLogout?: () => void;
+  userName?: string;
 }
 
 const menuItems = [
@@ -23,13 +28,14 @@ const menuItems = [
   { id: 'cogs', label: 'COGS', icon: Calculator },
   { id: 'inventory', label: 'Inventory', icon: Warehouse },
   { id: 'analytics', label: 'Analytics', icon: TrendingUp },
+  { id: 'ads', label: 'Ads Analytics', icon: Megaphone },
   { id: 'geo', label: 'Geo Analytics', icon: MapPin },
   { id: 'reconciliation', label: 'Reconciliation', icon: FileCheck },
   { id: 'reports', label: 'Reports', icon: BarChart3 },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
-export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
+export default function Sidebar({ activeTab, onTabChange, onLogout, userName }: SidebarProps) {
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 bg-white border-r border-gray-200 flex flex-col">
       <div className="p-6 border-b border-gray-100">
@@ -44,7 +50,7 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         </div>
       </div>
 
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -65,13 +71,29 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         })}
       </nav>
 
-      <div className="p-4 border-t border-gray-100">
-        <div className="bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl p-4 text-white">
-          <p className="font-medium text-sm">Need help?</p>
-          <p className="text-xs text-blue-100 mt-1">
-            Check our documentation for guides and tutorials.
-          </p>
-        </div>
+      <div className="p-4 border-t border-gray-100 space-y-3">
+        {/* User Profile */}
+        {userName && (
+          <div className="flex items-center gap-3 px-3 py-2">
+            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+              <User className="text-white" size={16} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-900 truncate">{userName}</p>
+            </div>
+          </div>
+        )}
+        
+        {/* Logout Button */}
+        {onLogout && (
+          <button
+            onClick={onLogout}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+          >
+            <LogOut size={20} />
+            Sign out
+          </button>
+        )}
       </div>
     </aside>
   );
